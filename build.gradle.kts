@@ -43,7 +43,7 @@ dependencies {
     // Database dependencies
     implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("com.mysql:mysql-connector-j:9.5.0")
-    implementation("org.postgresql:postgresql:42.7.8")
+    implementation("org.postgresql:postgresql:42.7.11")
     implementation("org.xerial:sqlite-jdbc:3.50.3.0")
     implementation("org.mongodb:mongodb-driver-sync:5.6.1")
     implementation("redis.clients:jedis:7.0.0")
