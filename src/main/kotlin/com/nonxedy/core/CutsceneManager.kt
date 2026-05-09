@@ -2,6 +2,11 @@ package com.nonxedy.core
 
 import com.nonxedy.Nonscenes
 import com.nonxedy.database.service.CutsceneDatabaseService
+import com.nonxedy.database.service.DatabaseType
+import com.nonxedy.database.service.impl.MongoDBCutsceneDatabaseService
+import com.nonxedy.database.service.impl.MySQLCutsceneDatabaseService
+import com.nonxedy.database.service.impl.PostgreSQLCutsceneDatabaseService
+import com.nonxedy.database.service.impl.RedisCutsceneDatabaseService
 import com.nonxedy.database.service.impl.SQLiteCutsceneDatabaseService
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
@@ -30,6 +35,7 @@ import kotlin.math.min
 
 class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface {
     private val databaseService: CutsceneDatabaseService
+    private var persistentStorageEnabled: Boolean
     private val cutscenes = mutableMapOf<String, Cutscene>()
     private val playerSessions = ConcurrentHashMap<UUID, PlayerSession>()
     private val sessionTasks = ConcurrentHashMap<UUID, BukkitTask>()
@@ -39,18 +45,66 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     private val cutsceneFolder = File(plugin.dataFolder, "cutscenes")
 
     init {
-        // Initialize SQLite database
-        val databaseFile = File(plugin.dataFolder, "cutscenes.db")
-        databaseService = SQLiteCutsceneDatabaseService(databaseFile)
+        databaseService = createDatabaseService()
 
         try {
             databaseService.initialize()
-            // Load cutscenes from database
+            persistentStorageEnabled = true
             loadCutscenesFromDatabase()
-        } catch (e: Exception) {
-            plugin.logger.log(Level.SEVERE, "Failed to initialize database, falling back to file storage", e)
-            // Fallback to file storage if database fails
             loadCutscenesFromFiles()
+        } catch (e: Exception) {
+            persistentStorageEnabled = false
+            plugin.logger.log(Level.SEVERE, "Failed to initialize database, falling back to file storage", e)
+            loadCutscenesFromFiles()
+        }
+    }
+
+    private fun createDatabaseService(): CutsceneDatabaseService {
+        val config = plugin.configManager.config
+        val typeName = config?.getString("storage.type")?.uppercase(Locale.ROOT) ?: DatabaseType.SQLITE.name
+        val type = runCatching { DatabaseType.valueOf(typeName) }.getOrElse {
+            plugin.logger.warning("Unknown storage type '$typeName', falling back to SQLITE")
+            DatabaseType.SQLITE
+        }
+
+        return when (type) {
+            DatabaseType.SQLITE -> {
+                val filePath = config?.getString("storage.sqlite.file-path").orEmpty().ifBlank { "cutscenes.db" }
+                SQLiteCutsceneDatabaseService(File(plugin.dataFolder, filePath))
+            }
+
+            DatabaseType.MYSQL -> MySQLCutsceneDatabaseService(
+                host = config?.getString("storage.mysql.host") ?: "localhost",
+                port = config?.getInt("storage.mysql.port", 3306) ?: 3306,
+                database = config?.getString("storage.mysql.database") ?: "minecraft",
+                username = config?.getString("storage.mysql.username") ?: "root",
+                password = config?.getString("storage.mysql.password") ?: ""
+            )
+
+            DatabaseType.POSTGRESQL -> PostgreSQLCutsceneDatabaseService(
+                host = config?.getString("storage.postgresql.host") ?: "localhost",
+                port = config?.getInt("storage.postgresql.port", 5432) ?: 5432,
+                database = config?.getString("storage.postgresql.database") ?: "minecraft",
+                username = config?.getString("storage.postgresql.username") ?: "postgres",
+                password = config?.getString("storage.postgresql.password") ?: ""
+            )
+
+            DatabaseType.MONGODB -> {
+                val host = config?.getString("storage.mongodb.host") ?: "localhost"
+                val port = config?.getInt("storage.mongodb.port", 27017) ?: 27017
+                val database = config?.getString("storage.mongodb.database") ?: "minecraft"
+                val username = config?.getString("storage.mongodb.username").orEmpty()
+                val password = config?.getString("storage.mongodb.password").orEmpty()
+                val credentials = if (username.isNotBlank()) "$username:$password@" else ""
+                MongoDBCutsceneDatabaseService("mongodb://$credentials$host:$port", database)
+            }
+
+            DatabaseType.REDIS -> RedisCutsceneDatabaseService(
+                host = config?.getString("storage.redis.host") ?: "localhost",
+                port = config?.getInt("storage.redis.port", 6379) ?: 6379,
+                password = config?.getString("storage.redis.password").takeUnless { it.isNullOrBlank() },
+                database = config?.getInt("storage.redis.database", 0) ?: 0
+            )
         }
     }
 
@@ -68,7 +122,6 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     private fun loadCutscenesFromFiles() {
-        val cutsceneFolder = java.io.File(plugin.dataFolder, "cutscenes")
         val files = cutsceneFolder.listFiles { _, name -> name.endsWith(".yml") } ?: return
 
         var fileCount = 0
@@ -109,12 +162,13 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     cutscenes[name.lowercase()] = cutscene
                     fileCount++
 
-                    // Try to save to database for migration
-                    try {
-                        databaseService.saveCutscene(cutscene)
-                        plugin.logger.info("Migrated cutscene from file to database: $name")
-                    } catch (dbException: Exception) {
-                        plugin.logger.log(java.util.logging.Level.WARNING, "Failed to migrate cutscene to database: $name", dbException)
+                    if (persistentStorageEnabled) {
+                        try {
+                            databaseService.saveCutscene(cutscene)
+                            plugin.logger.info("Migrated cutscene from file to database: $name")
+                        } catch (dbException: Exception) {
+                            plugin.logger.log(Level.WARNING, "Failed to migrate cutscene to database: $name", dbException)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -128,6 +182,14 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     private fun saveCutscene(cutscene: Cutscene) {
+        if (persistentStorageEnabled) {
+            databaseService.saveCutscene(cutscene)
+        }
+
+        saveCutsceneToFile(cutscene)
+    }
+
+    private fun saveCutsceneToFile(cutscene: Cutscene) {
         val file = File(cutsceneFolder, "${cutscene.name}.yml")
         val config = YamlConfiguration()
 
@@ -237,7 +299,17 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
         val cutscene = Cutscene(name, frames)
         cutscenes[name.lowercase()] = cutscene
-        saveCutscene(cutscene)
+        try {
+            saveCutscene(cutscene)
+        } catch (e: Exception) {
+            cutscenes.remove(name.lowercase())
+            plugin.logger.log(Level.SEVERE, "Failed to persist cutscene: $name", e)
+            val failureMessage = plugin.configManager.getMessage("error-occurred") ?: "§cFailed to save cutscene '$name'."
+            player.sendMessage(failureMessage)
+            playerSessions.remove(playerId)
+            sessionTasks.remove(playerId)
+            return
+        }
 
         val message = plugin.configManager.getMessage("recording-finished")
             ?.replace("{name}", name)
@@ -462,19 +534,34 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     override fun deleteCutscene(player: Player, name: String) {
-        if (!cutscenes.containsKey(name.lowercase())) {
+        val normalizedName = name.lowercase()
+        val cutscene = cutscenes[normalizedName]
+        if (cutscene == null) {
             val message = plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cCutscene '$name' not found!"
             player.sendMessage(message)
             return
         }
 
-        // Delete file if it exists
-        val file = File(cutsceneFolder, "$name.yml")
-        if (file.exists()) {
-            file.delete()
+        val file = File(cutsceneFolder, "${cutscene.name}.yml")
+        if (file.exists() && !file.delete()) {
+            plugin.logger.warning("Failed to delete cutscene file: ${file.absolutePath}")
+            val failureMessage = plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete cutscene '$name'."
+            player.sendMessage(failureMessage)
+            return
         }
 
-        cutscenes.remove(name.lowercase())
+        if (persistentStorageEnabled) {
+            try {
+                databaseService.deleteCutscene(cutscene.name)
+            } catch (e: Exception) {
+                plugin.logger.log(Level.SEVERE, "Failed to delete cutscene from database: ${cutscene.name}", e)
+                val failureMessage = plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete cutscene '$name'."
+                player.sendMessage(failureMessage)
+                return
+            }
+        }
+
+        cutscenes.remove(normalizedName)
         val message = plugin.configManager.getMessage("cutscene-deleted")?.replace("{name}", name) ?: "§aDeleted cutscene '$name'!"
         player.sendMessage(message)
     }
@@ -686,7 +773,15 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
         // Save all cutscenes
         for (cutscene in cutscenes.values) {
-            saveCutscene(cutscene)
+            try {
+                saveCutscene(cutscene)
+            } catch (e: Exception) {
+                plugin.logger.log(Level.WARNING, "Failed to persist cutscene during cleanup: ${cutscene.name}", e)
+            }
+        }
+
+        if (persistentStorageEnabled) {
+            databaseService.shutdown()
         }
 
         // Clear all session data
