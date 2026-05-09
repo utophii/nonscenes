@@ -29,7 +29,7 @@ This project uses Gradle with Kotlin DSL. To build the plugin:
 ### Build Commands
 ```bash
 # Clone the repository
-git clone https://github.com/nonxedy/nonscenes.git
+git clone https://github.com/utophii/nonscenes.git
 cd nonscenes
 
 # Build the plugin
