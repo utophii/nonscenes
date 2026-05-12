@@ -121,8 +121,34 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         }
     }
 
+    private fun ensureCutsceneFolderExists(): Boolean {
+        if (cutsceneFolder.exists()) {
+            if (!cutsceneFolder.isDirectory) {
+                plugin.logger.severe("Cutscene path is not a directory: ${cutsceneFolder.absolutePath}")
+                return false
+            }
+
+            return true
+        }
+
+        if (!cutsceneFolder.mkdirs()) {
+            plugin.logger.severe("Failed to create cutscene directory: ${cutsceneFolder.absolutePath}")
+            return false
+        }
+
+        return true
+    }
+
     private fun loadCutscenesFromFiles() {
-        val files = cutsceneFolder.listFiles { _, name -> name.endsWith(".yml") } ?: return
+        if (!ensureCutsceneFolderExists()) {
+            return
+        }
+
+        val files = cutsceneFolder.listFiles { _, name -> name.endsWith(".yml") }
+        if (files == null) {
+            plugin.logger.warning("Failed to list cutscene files in ${cutsceneFolder.absolutePath}")
+            return
+        }
 
         var fileCount = 0
         for (file in files) {
@@ -190,6 +216,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     private fun saveCutsceneToFile(cutscene: Cutscene) {
+        if (!ensureCutsceneFolderExists()) {
+            throw IOException("Cutscene directory is unavailable: ${cutsceneFolder.absolutePath}")
+        }
+
         val file = File(cutsceneFolder, "${cutscene.name}.yml")
         val config = YamlConfiguration()
 
@@ -211,7 +241,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         try {
             config.save(file)
         } catch (e: IOException) {
-            plugin.logger.warning("Failed to save cutscene: ${cutscene.name}")
+            plugin.logger.log(Level.WARNING, "Failed to save cutscene file: ${cutscene.name}", e)
+            throw e
         }
     }
 
