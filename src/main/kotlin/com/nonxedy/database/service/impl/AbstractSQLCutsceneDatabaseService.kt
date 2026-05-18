@@ -6,6 +6,7 @@ import com.nonxedy.model.CutsceneFrame
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import java.sql.Connection
+import java.sql.DatabaseMetaData
 import java.sql.DriverManager
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -65,9 +66,10 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
             }
 
             // Insert cutscene
-            conn.prepareStatement("INSERT INTO cutscenes (name, frame_count) VALUES (?, ?)").use { stmt ->
+            conn.prepareStatement("INSERT INTO cutscenes (name, frame_count, ticks_per_frame) VALUES (?, ?, ?)").use { stmt ->
                 stmt.setString(1, cutscene.name)
                 stmt.setInt(2, cutscene.frames.size)
+                stmt.setInt(3, cutscene.ticksPerFrame)
                 stmt.executeUpdate()
             }
 
@@ -106,7 +108,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         val cutscenes = mutableListOf<Cutscene>()
 
         conn.prepareStatement("""
-            SELECT c.name, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch
+            SELECT c.name, c.ticks_per_frame, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch
             FROM cutscenes c
             JOIN cutscene_frames f ON c.name = f.cutscene_name
             ORDER BY c.name, f.frame_index
@@ -117,6 +119,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
                 while (rs.next()) {
                     val name = rs.getString("name")
+                    val ticksPerFrame = rs.getInt("ticks_per_frame").coerceAtLeast(1)
 
                     if (currentCutscene == null || currentCutscene.name != name) {
                         // Save previous cutscene
@@ -126,7 +129,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
                         // Start new cutscene
                         currentFrames = mutableListOf()
-                        currentCutscene = Cutscene(name, currentFrames)
+                        currentCutscene = Cutscene(name, currentFrames, ticksPerFrame)
                     }
 
                     // Add frame
@@ -202,11 +205,41 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
                     stmt.execute(sql)
                 }
             }
+            ensureTimingColumn(conn)
             logger.info("Database tables created or verified")
 
         } catch (e: Exception) {
             logger.severe("Failed to create database tables: ${e.message}")
             throw RuntimeException("Failed to create database tables", e)
+        }
+    }
+
+    private fun ensureTimingColumn(conn: Connection) {
+        val metadata = conn.metaData
+        if (columnExists(metadata, "cutscenes", "ticks_per_frame")) {
+            return
+        }
+
+        conn.createStatement().use { stmt ->
+            stmt.execute("ALTER TABLE cutscenes ADD COLUMN ticks_per_frame INTEGER NOT NULL DEFAULT 1")
+        }
+    }
+
+    private fun columnExists(metadata: DatabaseMetaData, tableName: String, columnName: String): Boolean {
+        metadata.getColumns(null, null, tableName, columnName).use { rs ->
+            if (rs.next()) {
+                return true
+            }
+        }
+
+        metadata.getColumns(null, null, tableName.uppercase(), columnName.uppercase()).use { rs ->
+            if (rs.next()) {
+                return true
+            }
+        }
+
+        metadata.getColumns(null, null, tableName.lowercase(), columnName.lowercase()).use { rs ->
+            return rs.next()
         }
     }
 }

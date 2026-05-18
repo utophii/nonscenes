@@ -59,6 +59,7 @@ class MongoDBCutsceneDatabaseService(
             val cutsceneDoc = Document()
                 .append("name", cutscene.name)
                 .append("frameCount", cutscene.frames.size)
+                .append("ticksPerFrame", cutscene.ticksPerFrame)
 
             // Add frames
             val framesArray = mutableListOf<Document>()
@@ -95,6 +96,7 @@ class MongoDBCutsceneDatabaseService(
             for (doc in documents) {
                 val name = doc.getString("name")
                 val framesArray = doc.getList("frames", Document::class.java)
+                val ticksPerFrame = doc.getInteger("ticksPerFrame", 1).coerceAtLeast(1)
 
                 val frames = mutableListOf<CutsceneFrame>()
                 for (frameDoc in framesArray) {
@@ -114,7 +116,7 @@ class MongoDBCutsceneDatabaseService(
                 }
 
                 if (frames.isNotEmpty()) {
-                    cutscenes.add(Cutscene(name, frames))
+                    cutscenes.add(Cutscene(name, frames, ticksPerFrame))
                 }
             }
 

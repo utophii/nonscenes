@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface {
     private val databaseService: CutsceneDatabaseService
@@ -163,6 +164,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
                 val frames = mutableListOf<CutsceneFrame>()
                 val framesSection: ConfigurationSection? = config.getConfigurationSection("frames")
+                val ticksPerFrame = config.getInt("ticks-per-frame", getConfiguredTicksPerFrame())
 
                 if (framesSection != null) {
                     for (key in framesSection.getKeys(false)) {
@@ -184,7 +186,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 }
 
                 if (frames.isNotEmpty()) {
-                    val cutscene = Cutscene(name, frames)
+                    val cutscene = Cutscene(name, frames, ticksPerFrame)
                     cutscenes[name.lowercase()] = cutscene
                     fileCount++
 
@@ -224,6 +226,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         val config = YamlConfiguration()
 
         config.set("name", cutscene.name)
+        config.set("ticks-per-frame", cutscene.ticksPerFrame)
 
         val frames = cutscene.frames
         for (i in frames.indices) {
@@ -294,15 +297,16 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         val message = plugin.configManager.getMessage("recording-started")?.replace("{name}", name) ?: "§aStarted recording cutscene '$name'!"
         player.sendMessage(message)
 
-        val framesPerSecond = plugin.configManager.config?.getInt("settings.frames-per-second", 30) ?: 30
-        val delay = max(1L, 20L / framesPerSecond)
+        val framesPerSecond = getConfiguredFramesPerSecond()
+        val ticksPerFrame = getTicksPerFrame(framesPerSecond)
+        val delay = ticksPerFrame.toLong()
 
         val task = object : BukkitRunnable() {
             var frameCount = 0
 
             override fun run() {
                 if (frameCount >= totalFrames) {
-                    finishRecording(player, name, frames)
+                    finishRecording(player, name, frames, ticksPerFrame)
                     cancel()
                     return
                 }
@@ -325,10 +329,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         sessionTasks[playerId] = task
     }
 
-    private fun finishRecording(player: Player, name: String, frames: List<CutsceneFrame>) {
+    private fun finishRecording(player: Player, name: String, frames: List<CutsceneFrame>, ticksPerFrame: Int) {
         val playerId = player.uniqueId
 
-        val cutscene = Cutscene(name, frames)
+        val cutscene = Cutscene(name, frames, ticksPerFrame)
         cutscenes[name.lowercase()] = cutscene
         try {
             saveCutscene(cutscene)
@@ -384,11 +388,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         // Asynchronous preloading of ALL chunks
         preloadChunksAsync(frames)
 
-        val framesPerSecond = plugin.configManager.config
-            ?.getInt("settings.frames-per-second", 30) ?: 30
-
-        // The duration of one keyframe in ms
-        val frameDurationMs = 1000L / framesPerSecond.coerceAtLeast(1)
+        // The duration of one keyframe is fixed at record time and stored with the cutscene
+        val frameDurationMs = cutscene.ticksPerFrame.coerceAtLeast(1) * 50L
         val totalDurationMs = frameDurationMs * (frames.size - 1)
 
         val startTime = System.currentTimeMillis()
@@ -778,6 +779,19 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun getCutsceneNames(): List<String> = cutscenes.keys.toList()
 
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
+
+    private fun getConfiguredFramesPerSecond(): Int {
+        return plugin.configManager.config?.getInt("settings.frames-per-second", 30) ?: 30
+    }
+
+    private fun getConfiguredTicksPerFrame(): Int {
+        return getTicksPerFrame(getConfiguredFramesPerSecond())
+    }
+
+    private fun getTicksPerFrame(framesPerSecond: Int): Int {
+        val safeFps = framesPerSecond.coerceAtLeast(1)
+        return max(1, (20.0 / safeFps).roundToInt())
+    }
 
     override fun cancelAllSessions(player: Player) {
         val playerId = player.uniqueId
