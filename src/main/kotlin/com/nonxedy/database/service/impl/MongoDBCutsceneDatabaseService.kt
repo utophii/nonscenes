@@ -7,7 +7,6 @@ import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoDatabase
 import org.bson.Document
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import java.util.logging.Level
 
@@ -67,7 +66,7 @@ class MongoDBCutsceneDatabaseService(
                 val location = frame.location
                 val frameDoc = Document()
                     .append("frameIndex", index)
-                    .append("world", location.world?.name ?: "world")
+                    .append("world", frame.worldName)
                     .append("x", location.x)
                     .append("y", location.y)
                     .append("z", location.z)
@@ -101,18 +100,15 @@ class MongoDBCutsceneDatabaseService(
                 val frames = mutableListOf<CutsceneFrame>()
                 for (frameDoc in framesArray) {
                     val worldName = frameDoc.getString("world")
-                    val world = Bukkit.getWorld(worldName)
-                    if (world != null) {
-                        val location = Location(
-                            world,
-                            frameDoc.getDouble("x"),
-                            frameDoc.getDouble("y"),
-                            frameDoc.getDouble("z"),
-                            frameDoc.getDouble("yaw").toFloat(),
-                            frameDoc.getDouble("pitch").toFloat()
-                        )
-                        frames.add(CutsceneFrame(location))
-                    }
+                    val location = Location(
+                        null,
+                        frameDoc.getDouble("x"),
+                        frameDoc.getDouble("y"),
+                        frameDoc.getDouble("z"),
+                        frameDoc.getDouble("yaw").toFloat(),
+                        frameDoc.getDouble("pitch").toFloat()
+                    )
+                    frames.add(CutsceneFrame(location, worldName))
                 }
 
                 if (frames.isNotEmpty()) {

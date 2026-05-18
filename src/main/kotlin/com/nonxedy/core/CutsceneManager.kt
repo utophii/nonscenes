@@ -177,9 +177,9 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                             val yaw = frameSection.getDouble("yaw").toFloat()
                             val pitch = frameSection.getDouble("pitch").toFloat()
 
-                            if (worldName != null && Bukkit.getWorld(worldName) != null) {
+                            if (worldName != null) {
                                 val location = Location(Bukkit.getWorld(worldName), x, y, z, yaw, pitch)
-                                frames.add(CutsceneFrame(location))
+                                frames.add(CutsceneFrame(location, worldName))
                             }
                         }
                     }
@@ -233,7 +233,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             val frame = frames[i]
             val location = frame.location
 
-            config.set("frames.$i.world", location.world?.name ?: "world")
+            config.set("frames.$i.world", frame.worldName)
             config.set("frames.$i.x", location.x)
             config.set("frames.$i.y", location.y)
             config.set("frames.$i.z", location.z)
@@ -372,6 +372,13 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         }
 
         val frames = cutscene.frames
+        val resolvedFrames = resolveFrameLocations(frames)
+        if (resolvedFrames == null) {
+            val worldName = findFirstMissingWorldName(frames) ?: "unknown"
+            player.sendMessage("§cUnable to play cutscene '$name': world '$worldName' is not loaded.")
+            return
+        }
+
         val session = PlayerSession.Playback(playerId, name, 0, frames.size)
         playerSessions[playerId] = session
 
@@ -383,10 +390,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         player.gameMode = GameMode.SPECTATOR
 
         // Teleport immediately to the start and teleport until the chunks are fully loaded
-        player.teleport(frames[0].location)
+        player.teleport(resolvedFrames[0])
 
         // Asynchronous preloading of ALL chunks
-        preloadChunksAsync(frames)
+        preloadChunksAsync(resolvedFrames)
 
         // The duration of one keyframe is fixed at record time and stored with the cutscene
         val frameDurationMs = cutscene.ticksPerFrame.coerceAtLeast(1) * 50L
@@ -406,8 +413,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
                 // The cutscene is complete
                 if (elapsed >= totalDurationMs) {
-                    player.teleport(frames.last().location)
-                    finishPlayback(player, name, savedLocations[playerId] ?: frames[0].location)
+                    player.teleport(resolvedFrames.last())
+                    finishPlayback(player, name, savedLocations[playerId] ?: resolvedFrames[0])
                     cancel(); return
                 }
 
@@ -422,7 +429,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 val easedT = smoothStep(rawT)
 
                 // Position on the Catmull-Rom spline
-                val loc = interpolateCatmull(frames, frameIndex, easedT)
+                val loc = interpolateCatmull(resolvedFrames, frameIndex, easedT)
 
                 // The chunk isnt loaded - just wait for the next tick
                 val cx = loc.blockX shr 4
@@ -442,14 +449,14 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         sessionTasks[playerId] = task
     }
 
-    private fun preloadChunksAsync(frames: List<CutsceneFrame>) {
-        val world = frames.firstOrNull()?.location?.world ?: return
+    private fun preloadChunksAsync(frames: List<Location>) {
+        val world = frames.firstOrNull()?.world ?: return
 
         // Collect unique chunks + neighbors in R=2
         val chunks = mutableSetOf<Pair<Int, Int>>()
         frames.forEach { frame ->
-            val cx = frame.location.blockX shr 4
-            val cz = frame.location.blockZ shr 4
+            val cx = frame.blockX shr 4
+            val cz = frame.blockZ shr 4
             for (dx in -2..2) {
                 for (dz in -2..2) {
                     chunks.add((cx + dx) to (cz + dz))
@@ -515,7 +522,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     private fun smoothStep(t: Float): Float = t * t * (3f - 2f * t)
 
     private fun interpolateCatmull(
-        frames: List<CutsceneFrame>,
+        frames: List<Location>,
         index: Int,
         t: Float
     ): Location {
@@ -526,10 +533,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         val i2 = (index + 1).coerceAtMost(n - 1)
         val i3 = (index + 2).coerceAtMost(n - 1)
 
-        val p0 = frames[i0].location
-        val p1 = frames[i1].location
-        val p2 = frames[i2].location
-        val p3 = frames[i3].location
+        val p0 = frames[i0]
+        val p1 = frames[i1]
+        val p2 = frames[i2]
+        val p3 = frames[i3]
 
         val world = p1.world
         val x = catmullRom(p0.x, p1.x, p2.x, p3.x, t)
@@ -650,6 +657,14 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             ?.replace("{duration}", durationSeconds.toString()) ?: "§aShowing path for '$name' ($durationSeconds seconds)..."
         player.sendMessage(message)
 
+        val resolvedFrames = resolveFrameLocations(frames)
+        if (resolvedFrames == null) {
+            val worldName = findFirstMissingWorldName(frames) ?: "unknown"
+            player.sendMessage("§cUnable to show path for '$name': world '$worldName' is not loaded.")
+            playerSessions.remove(playerId)
+            return
+        }
+
         val task = object : BukkitRunnable() {
             var tickCounter = 0
             val totalTicks = durationSeconds * 20
@@ -662,9 +677,9 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     return
                 }
 
-                for (i in 0 until frames.size - 1) {
-                    val start = frames[i].location
-                    val end = frames[i + 1].location
+                for (i in 0 until resolvedFrames.size - 1) {
+                    val start = resolvedFrames[i]
+                    val end = resolvedFrames[i + 1]
 
                     if (start.world != end.world) {
                         continue
@@ -685,8 +700,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     }
                 }
 
-                for (frame in frames) {
-                    val loc = frame.location
+                for (loc in resolvedFrames) {
                     loc.world.spawnParticle(
                         Particle.FLAME,
                         loc.x, loc.y, loc.z,
@@ -699,6 +713,16 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         }.runTaskTimer(plugin, 0L, 5L)
 
         sessionTasks[playerId] = task
+    }
+
+    private fun resolveFrameLocations(frames: List<CutsceneFrame>): List<Location>? {
+        return frames.map { frame ->
+            frame.resolveLocation() ?: return null
+        }
+    }
+
+    private fun findFirstMissingWorldName(frames: List<CutsceneFrame>): String? {
+        return frames.firstOrNull { it.resolveLocation() == null }?.worldName
     }
 
     override fun cancelRecording(player: Player) {

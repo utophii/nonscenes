@@ -3,7 +3,6 @@ package com.nonxedy.database.service.impl
 import com.nonxedy.database.service.CutsceneDatabaseService
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import redis.clients.jedis.Jedis
 import redis.clients.jedis.JedisPool
@@ -70,7 +69,7 @@ class RedisCutsceneDatabaseService(
                 cutscene.frames.forEachIndexed { index, frame ->
                     val location = frame.location
                     val frameKey = "$key:frame:$index"
-                    jedis.hset(frameKey, "world", location.world?.name ?: "world")
+                    jedis.hset(frameKey, "world", frame.worldName)
                     jedis.hset(frameKey, "x", location.x.toString())
                     jedis.hset(frameKey, "y", location.y.toString())
                     jedis.hset(frameKey, "z", location.z.toString())
@@ -116,21 +115,18 @@ class RedisCutsceneDatabaseService(
                             if (worldName != null && xStr != null && yStr != null && zStr != null &&
                                 yawStr != null && pitchStr != null) {
 
-                                val world = Bukkit.getWorld(worldName)
-                                if (world != null) {
-                                    try {
-                                        val location = Location(
-                                            world,
-                                            xStr.toDouble(),
-                                            yStr.toDouble(),
-                                            zStr.toDouble(),
-                                            yawStr.toFloat(),
-                                            pitchStr.toFloat()
-                                        )
-                                        frames.add(CutsceneFrame(location))
-                                    } catch (e: NumberFormatException) {
-                                        logger.warning("Invalid frame data for cutscene $name, frame $i")
-                                    }
+                                try {
+                                    val location = Location(
+                                        null,
+                                        xStr.toDouble(),
+                                        yStr.toDouble(),
+                                        zStr.toDouble(),
+                                        yawStr.toFloat(),
+                                        pitchStr.toFloat()
+                                    )
+                                    frames.add(CutsceneFrame(location, worldName))
+                                } catch (e: NumberFormatException) {
+                                    logger.warning("Invalid frame data for cutscene $name, frame $i")
                                 }
                             }
                         }

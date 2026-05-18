@@ -3,7 +3,6 @@ package com.nonxedy.database.service.impl
 import com.nonxedy.database.service.CutsceneDatabaseService
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import java.sql.Connection
 import java.sql.DatabaseMetaData
@@ -81,7 +80,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
                     val location = frame.location
                     stmt.setString(1, cutscene.name)
                     stmt.setInt(2, index)
-                    stmt.setString(3, location.world?.name ?: "world")
+                    stmt.setString(3, frame.worldName)
                     stmt.setDouble(4, location.x)
                     stmt.setDouble(5, location.y)
                     stmt.setDouble(6, location.z)
@@ -134,18 +133,15 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
                     // Add frame
                     val worldName = rs.getString("world")
-                    val world = Bukkit.getWorld(worldName)
-                    if (world != null) {
-                        val location = Location(
-                            world,
-                            rs.getDouble("x"),
-                            rs.getDouble("y"),
-                            rs.getDouble("z"),
-                            rs.getFloat("yaw"),
-                            rs.getFloat("pitch")
-                        )
-                        currentFrames.add(CutsceneFrame(location))
-                    }
+                    val location = Location(
+                        null,
+                        rs.getDouble("x"),
+                        rs.getDouble("y"),
+                        rs.getDouble("z"),
+                        rs.getFloat("yaw"),
+                        rs.getFloat("pitch")
+                    )
+                    currentFrames.add(CutsceneFrame(location, worldName))
                 }
 
                 // Add last cutscene
