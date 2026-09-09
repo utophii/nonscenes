@@ -8,7 +8,7 @@
 - [x] Remove Redis storage (in-memory, data loss, blocking `KEYS`)
 - [x] Sanitize cutscene names (`[a-zA-Z0-9_-]` only) to prevent path traversal
 - [x] Fix `showpath` duration (task period is 5 ticks, counter treats it as 1 tick)
-- [ ] Start async packet playback only after the armor stand is spawned
+- [x] Start async packet playback only after the armor stand is spawned
 - [ ] Attach a real plugin JAR to GitHub Releases (CI `shadowJar` artifact)
 - [ ] Switch versioning to semver (`0.9.0-alpha` → `1.0.0`) instead of `08-a`
 

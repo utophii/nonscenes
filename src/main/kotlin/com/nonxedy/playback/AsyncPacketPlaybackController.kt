@@ -43,16 +43,10 @@ class AsyncPacketPlaybackController(
         active.set(true)
         cleanedUp.set(false)
         playerRef = player
-
-        val pathArray = path.toTypedArray()
-        val lastIndex = pathArray.lastIndex
-        val startTime = System.currentTimeMillis()
-        val intervalNs = 1_000_000_000L / updateRate
-
-        // Remember where the player started so we can bring them back afterwards
         originalLocation = player.location.clone()
 
-        // Prepare the player and the carrier on the main thread (Bukkit requires it)
+        val pathArray = path.toTypedArray()
+
         Bukkit.getScheduler().runTask(plugin, Runnable {
             if (!active.get() || !player.isOnline) {
                 cleanup(player)
@@ -61,24 +55,33 @@ class AsyncPacketPlaybackController(
 
             wasFlying = player.isFlying
             wasAllowedFlight = player.allowFlight
-
-            // Do not let the player see their own body during the cutscene
             player.hidePlayer(player)
-
-            // Keep the player hovering so they don't fall or drift while riding
             player.setAllowFlight(true)
             player.setFlying(true)
 
             val stand = spawnCarrier(player, pathArray[0])
             carrier = stand
             stand.addPassenger(player)
+
+            if (!active.get() || !player.isOnline) {
+                cleanup(player)
+                return@Runnable
+            }
+
+            beginPacketLoop(player, pathArray, totalDurationMs)
         })
+    }
+
+    private fun beginPacketLoop(player: Player, pathArray: Array<Location>, totalDurationMs: Long) {
+        if (!active.get()) return
+
+        val lastIndex = pathArray.lastIndex
+        val intervalNs = 1_000_000_000L / updateRate
+        val startTime = System.currentTimeMillis()
 
         executor = Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "nonscenes-async-playback-${player.uniqueId.toString().take(8)}")
         }.apply {
-            // scheduleWithFixedDelay keeps a consistent interval instead of "burst
-            // catching up" after any scheduling hiccup, which reduces visible jitter
             scheduleWithFixedDelay({
                 if (!active.get() || !player.isOnline) {
                     active.set(false)
@@ -103,27 +106,25 @@ class AsyncPacketPlaybackController(
 
                 val progress = elapsed.toDouble() / totalDurationMs.toDouble()
                 val loc = samplePath(pathArray, lastIndex, progress)
-
                 val stand = carrier
-                if (stand != null && PacketEvents.getAPI().isInitialized) {
-                    try {
-                        // Move the carrier (and therefore the player's camera) to the
-                        // interpolated point. The stand's Y is offset so the sitting
-                        // eye height matches the recorded standing eye height
-                        val carrierPacket = WrapperPlayServerEntityTeleport(
-                            stand.entityId,
-                            Vector3d(loc.x, loc.y + rideHeightOffset, loc.z),
-                            loc.yaw,
-                            loc.pitch,
-                            true
-                        )
-                        PacketEvents.getAPI().playerManager.sendPacket(player, carrierPacket)
+                if (stand == null || stand.isDead || !PacketEvents.getAPI().isInitialized) {
+                    return@scheduleWithFixedDelay
+                }
 
-                        // Lock the player's own look direction (esp. pitch) each update
-                        val rotationPacket = WrapperPlayServerPlayerRotation(loc.yaw, loc.pitch)
-                        PacketEvents.getAPI().playerManager.sendPacket(player, rotationPacket)
-                    } catch (_: Exception) {
-                    }
+                try {
+                    val carrierPacket = WrapperPlayServerEntityTeleport(
+                        stand.entityId,
+                        Vector3d(loc.x, loc.y + rideHeightOffset, loc.z),
+                        loc.yaw,
+                        loc.pitch,
+                        true
+                    )
+                    PacketEvents.getAPI().playerManager.sendPacket(player, carrierPacket)
+                    PacketEvents.getAPI().playerManager.sendPacket(
+                        player,
+                        WrapperPlayServerPlayerRotation(loc.yaw, loc.pitch)
+                    )
+                } catch (_: Exception) {
                 }
 
                 val index = (progress * lastIndex).toInt().coerceIn(0, lastIndex)
