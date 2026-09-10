@@ -2,7 +2,7 @@ name: nonscenes
 author: utophii
 main: com.nonxedy.Nonscenes
 description: Plugin for creation cutscenes 1.20-1.21.11
-version: 08-a
+version: 09-a
 prefix: nonscenes
 api-version: 1.20
 load: POSTWORLD
