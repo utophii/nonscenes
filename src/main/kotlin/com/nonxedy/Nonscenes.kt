@@ -2,6 +2,7 @@ package com.nonxedy
 
 import org.bukkit.command.PluginCommand
 import org.bukkit.plugin.java.JavaPlugin
+import com.github.retrooper.packetevents.PacketEvents
 import com.nonxedy.command.NonsceneCommand
 import com.nonxedy.core.ConfigManager
 import com.nonxedy.core.ConfigManagerInterface
@@ -49,7 +50,8 @@ class Nonscenes : JavaPlugin() {
 
     // Initialize all dependencies using dependency injection pattern
     private fun initializeDependencies() {
-        // Initialize config manager
+        requirePacketEvents()
+
         val configManagerImpl = ConfigManager(this)
         configManagerImpl.loadConfigs()
         configManager = configManagerImpl
@@ -57,6 +59,20 @@ class Nonscenes : JavaPlugin() {
         // Initialize cutscene manager with dependency injection
         val cutsceneManagerImpl = CutsceneManager(this)
         cutsceneManager = cutsceneManagerImpl
+    }
+
+    private fun requirePacketEvents() {
+        if (server.pluginManager.getPlugin("packetevents") == null) {
+            throw IllegalStateException("packetevents is required and must be installed")
+        }
+        val api = try {
+            PacketEvents.getAPI()
+        } catch (e: Exception) {
+            throw IllegalStateException("PacketEvents API is not available", e)
+        }
+        if (api == null || !api.isInitialized) {
+            throw IllegalStateException("PacketEvents API is not initialized")
+        }
     }
 
     override fun onDisable() {

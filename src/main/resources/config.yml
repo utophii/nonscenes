@@ -23,13 +23,8 @@ settings:
 # ---------------------------------------------------------------------------
 cutscene:
   playback:
-    # Playback engine used to move the camera.
-    #   TICK          — main-thread teleports every tick (no PacketEvents required).
-    #   ASYNC_PACKET  — dedicated thread, packet-based, supports up to 240 Hz (default).
-    mode: ASYNC_PACKET
-
-    # Target update rate (Hz). Range 20–240.
-    # Requires PacketEvents installed on the server.
+    # Packet-based camera on a dedicated thread (20–240 Hz).
+    # PacketEvents is required
     update-rate: 60
 
     # Vertical offset added to the path so that the sitting (ridden) player's eye
@@ -37,9 +32,8 @@ cutscene:
     # appears too low, decrease if too high (typical fine-tune range: 0.0–1.5).
     ride-height-offset: 0.75
 
-    # LINEAR      — straight lines between keyframes (fallback).
-    # CATMULL_ROM — smooth spline through all keyframes (recommended).
-    # BEZIER      — cubic Bezier with auto control points.
+    # CATMULL_ROM - smooth spline through all keyframes.
+    # BEZIER - cubic Bezier with auto control points.
     interpolation: CATMULL_ROM
 
     # Smooth rotation transitions (yaw/pitch wrapping handled automatically)
@@ -107,17 +101,6 @@ storage:
     options:
       connect-timeout: 10000
       server-selection-timeout: 30000
-
-  redis:
-    host: localhost
-    port: 6379
-    database: 0
-    password: ""
-    pool:
-      max-total: 20
-      max-idle: 10
-      min-idle: 2
-      timeout: 3000
 
   general:
     auto-create-tables: true

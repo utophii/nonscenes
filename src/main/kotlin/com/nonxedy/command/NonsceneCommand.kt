@@ -8,6 +8,7 @@ import org.bukkit.entity.Player
 import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManagerInterface
+import com.nonxedy.util.CutsceneNames
 
 class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompleter {
     private val configManager: ConfigManagerInterface by lazy { plugin.configManager }
@@ -51,6 +52,10 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 }
 
                 val name = args[1]
+                if (!CutsceneNames.isValid(name)) {
+                    player.sendMessage(configManager.getMessage("invalid-cutscene-name"))
+                    return true
+                }
                 val seconds: Int
 
                 try {

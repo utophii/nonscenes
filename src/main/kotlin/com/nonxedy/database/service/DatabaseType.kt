@@ -5,6 +5,5 @@ enum class DatabaseType {
     SQLITE,
     MYSQL,
     POSTGRESQL,
-    MONGODB,
-    REDIS
+    MONGODB
 }

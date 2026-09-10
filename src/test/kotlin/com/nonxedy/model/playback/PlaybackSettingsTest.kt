@@ -17,6 +17,12 @@ class PlaybackSettingsTest {
     }
 
     @Test
+    fun `playback settings have no tick mode field`() {
+        val fields = PlaybackSettings::class.java.declaredFields.map { it.name }
+        assertFalse(fields.contains("mode"), "TICK/ASYNC mode must not exist; playback is ASYNC_PACKET only")
+    }
+
+    @Test
     fun `update rate clamped to minimum 20`() {
         val settings = PlaybackSettings(updateRate = 10)
         assertEquals(20, settings.updateRate)

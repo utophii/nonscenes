@@ -6,22 +6,18 @@ import com.nonxedy.database.service.DatabaseType
 import com.nonxedy.database.service.impl.MongoDBCutsceneDatabaseService
 import com.nonxedy.database.service.impl.MySQLCutsceneDatabaseService
 import com.nonxedy.database.service.impl.PostgreSQLCutsceneDatabaseService
-import com.nonxedy.database.service.impl.RedisCutsceneDatabaseService
 import com.nonxedy.database.service.impl.SQLiteCutsceneDatabaseService
 import com.nonxedy.interpolator.BezierPathInterpolator
 import com.nonxedy.interpolator.CatmullRomPathInterpolator
-import com.nonxedy.interpolator.LinearPathInterpolator
 import com.nonxedy.interpolator.PathInterpolator
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
 import com.nonxedy.model.playback.InterpolationType
-import com.nonxedy.model.playback.PlaybackMode
-import com.nonxedy.model.playback.PlaybackSettings
 import com.nonxedy.playback.AsyncPacketPlaybackController
 import com.nonxedy.playback.CutscenePlaybackController
-import com.nonxedy.playback.TickPlaybackController
 import com.nonxedy.playback.PathBaker
 import com.nonxedy.recording.CutsceneRecorder
+import com.nonxedy.util.CutsceneNames
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -99,19 +95,19 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 val credentials = if (username.isNotBlank()) "$username:$password@" else ""
                 MongoDBCutsceneDatabaseService("mongodb://$credentials$host:$port", database)
             }
-            DatabaseType.REDIS -> RedisCutsceneDatabaseService(
-                host = config?.getString("storage.redis.host") ?: "localhost",
-                port = config?.getInt("storage.redis.port", 6379) ?: 6379,
-                password = config?.getString("storage.redis.password").takeUnless { it.isNullOrBlank() },
-                database = config?.getInt("storage.redis.database", 0) ?: 0
-            )
         }
     }
 
     private fun loadCutscenesFromDatabase() {
         try {
             val loaded = databaseService.loadAllCutscenes()
-            for (c in loaded) cutscenes[c.name.lowercase()] = c
+            for (c in loaded) {
+                if (!CutsceneNames.isValid(c.name)) {
+                    plugin.logger.warning("Skipping cutscene with invalid name from database: ${c.name}")
+                    continue
+                }
+                cutscenes[c.name.lowercase()] = c
+            }
             plugin.logger.info("Loaded ${loaded.size} cutscenes from database")
         } catch (e: Exception) {
             plugin.logger.log(Level.SEVERE, "Failed to load cutscenes from database", e)
@@ -131,6 +127,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             try {
                 val config = YamlConfiguration.loadConfiguration(file)
                 val name = file.nameWithoutExtension
+                if (!CutsceneNames.isValid(name)) {
+                    plugin.logger.warning("Skipping cutscene with invalid name: ${file.name}")
+                    continue
+                }
                 if (cutscenes.containsKey(name.lowercase())) continue
                 val frames = mutableListOf<CutsceneFrame>()
                 val framesSection = config.getConfigurationSection("frames")
@@ -178,7 +178,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
     private fun saveCutsceneToFile(cutscene: Cutscene) {
         if (!ensureCutsceneFolderExists()) throw IOException("Cutscene directory unavailable")
-        val file = File(cutsceneFolder, "${cutscene.name}.yml")
+        if (!CutsceneNames.isValid(cutscene.name)) {
+            throw IOException("Invalid cutscene name: ${cutscene.name}")
+        }
+        val file = cutsceneFile(cutscene.name)
         val config = YamlConfiguration()
         config.set("name", cutscene.name)
         config.set("frame-duration-ms", cutscene.frameDurationMs)
@@ -205,6 +208,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
     // Recording
     override fun startRecording(player: Player, name: String, seconds: Int) {
+        if (!CutsceneNames.isValid(name)) {
+            player.sendMessage(plugin.configManager.getMessage("invalid-cutscene-name"))
+            return
+        }
         val playerId = player.uniqueId
         if (playerSessions.containsKey(playerId)) {
             player.sendMessage(plugin.configManager.getMessage("already-recording"))
@@ -351,17 +358,18 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             Unit
         }
 
-        val controller = if (settings.mode == PlaybackMode.TICK) {
-            TickPlaybackController(plugin, settings.rideHeightOffset, onComplete, onCancel)
-        } else {
-            AsyncPacketPlaybackController(plugin, settings.updateRate, settings.rideHeightOffset, onComplete, onCancel)
-        }
+        val controller = AsyncPacketPlaybackController(
+            plugin,
+            settings.updateRate,
+            settings.rideHeightOffset,
+            onComplete,
+            onCancel
+        )
         activeControllers[playerId] = controller
         controller.start(player, path, totalDurationMs)
     }
 
     private fun createInterpolator(type: InterpolationType): PathInterpolator = when (type) {
-        InterpolationType.LINEAR -> LinearPathInterpolator()
         InterpolationType.CATMULL_ROM -> CatmullRomPathInterpolator()
         InterpolationType.BEZIER -> BezierPathInterpolator()
     }
@@ -426,10 +434,11 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         }
 
         val task = object : BukkitRunnable() {
-            var tickCounter = 0
+            var elapsedTicks = 0
+            val periodTicks = 5
             val totalTicks = durationSeconds * 20
             override fun run() {
-                if (tickCounter >= totalTicks) {
+                if (elapsedTicks >= totalTicks) {
                     cancel(); playerSessions.remove(playerId); sessionTasks.remove(playerId); return
                 }
                 for (i in 0 until resolvedFrames.size - 1) {
@@ -448,7 +457,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 for (loc in resolvedFrames) {
                     loc.world.spawnParticle(Particle.FLAME, loc.x, loc.y, loc.z, 3, 0.1, 0.1, 0.1, 0.01)
                 }
-                tickCounter++
+                elapsedTicks += periodTicks
             }
         }.runTaskTimer(plugin, 0L, 5L)
         sessionTasks[playerId] = task
@@ -462,7 +471,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             player.sendMessage(plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cNot found")
             return
         }
-        val file = File(cutsceneFolder, "${cutscene.name}.yml")
+        val file = cutsceneFile(cutscene.name)
         if (file.exists() && !file.delete()) {
             plugin.logger.warning("Failed to delete cutscene file: ${file.absolutePath}")
             player.sendMessage(plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete.")
@@ -556,6 +565,19 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
 
     // Helpers
+    private fun cutsceneFile(name: String): File {
+        if (!CutsceneNames.isValid(name)) {
+            throw IOException("Invalid cutscene name: $name")
+        }
+        val file = File(cutsceneFolder, "$name.yml")
+        val folder = cutsceneFolder.canonicalFile
+        val resolved = file.canonicalFile
+        if (resolved.parentFile != folder) {
+            throw IOException("Cutscene path escaped storage directory: $name")
+        }
+        return file
+    }
+
     private fun resolveFrameLocations(frames: List<CutsceneFrame>): List<Location>? {
         return frames.map { it.resolveLocation() ?: return null }
     }

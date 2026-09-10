@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.4.20-RC"
     id("java")
     id("com.gradleup.shadow") version "9.4.1"
 }
 
 group = "com.nonxedy"
-version = "08-a"
+version = "09-a"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -36,13 +36,13 @@ dependencies {
     implementation(kotlin("stdlib"))
 
     // SnakeYAML for config
-    implementation("org.yaml:snakeyaml:2.4")
+    implementation("org.yaml:snakeyaml:2.6")
 
     // Adventure text minimessage
     implementation("net.kyori:adventure-text-minimessage:4.24.0")
 
     // Apache Commons Lang
-    implementation("org.apache.commons:commons-lang3:3.18.0")
+    implementation("org.apache.commons:commons-lang3:3.20.0")
 
     // Database dependencies
     implementation("com.zaxxer:HikariCP:7.0.2")
@@ -50,7 +50,6 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.12")
     implementation("org.xerial:sqlite-jdbc:3.50.3.0")
     implementation("org.mongodb:mongodb-driver-sync:5.6.1")
-    implementation("redis.clients:jedis:7.0.0")
 
     // Test dependencies
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")

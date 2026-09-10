@@ -8,6 +8,7 @@ no-permission: "${prefix}&#e74c3cYou don't have permission to use this command."
 invalid-start-args: "${prefix}&#e74c3cUsage: /nonscene start <name> <seconds>"
 invalid-duration: "${prefix}&#e74c3cDuration must be a positive number of seconds (1–300)."
 specify-cutscene-name: "${prefix}&#e74c3cPlease specify a cutscene name."
+invalid-cutscene-name: "${prefix}&#e74c3cCutscene names may only contain letters, digits, underscore and hyphen."
 
 # Recording messages
 already-recording: "${prefix}&#e74c3cYou are already recording a cutscene."

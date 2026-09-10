@@ -16,22 +16,6 @@ class PathInterpolatorTest {
     }
 
     @Test
-    fun `linear interpolator returns start at t 0`() {
-        val frames = listOf(frame(0.0, 0.0, 0.0), frame(10.0, 0.0, 0.0))
-        val interp = LinearPathInterpolator()
-        val point = interp.interpolate(frames, 0.0)
-        assertEquals(0.0, point.x, 0.001)
-    }
-
-    @Test
-    fun `linear interpolator returns end at t 1`() {
-        val frames = listOf(frame(0.0, 0.0, 0.0), frame(10.0, 0.0, 0.0))
-        val interp = LinearPathInterpolator()
-        val point = interp.interpolate(frames, 1.0)
-        assertEquals(10.0, point.x, 0.001)
-    }
-
-    @Test
     fun `catmull-rom interpolator returns middle at t 0_5 with 3 frames`() {
         val frames = listOf(frame(0.0, 0.0, 0.0), frame(5.0, 0.0, 0.0), frame(10.0, 0.0, 0.0))
         val interp = CatmullRomPathInterpolator()
@@ -58,7 +42,7 @@ class PathInterpolatorTest {
     @Test
     fun `single frame always returns same point`() {
         val frames = listOf(frame(3.0, 4.0, 5.0))
-        listOf(LinearPathInterpolator(), CatmullRomPathInterpolator(), BezierPathInterpolator()).forEach { interp ->
+        listOf(CatmullRomPathInterpolator(), BezierPathInterpolator()).forEach { interp ->
             val point = interp.interpolate(frames, 0.5)
             assertEquals(3.0, point.x, 0.001, "${interp::class.simpleName} failed on single frame")
             assertEquals(4.0, point.y, 0.001, "${interp::class.simpleName} failed on single frame")
