@@ -27,7 +27,7 @@
 ### Playback / recording correctness
 
 - [x] Remove `LINEAR` interpolation
-- [ ] Wait for chunk preload before starting playback
+- [x] Wait for chunk preload before starting playback
 - [ ] Do not skip camera updates when a chunk is unloaded
 - [ ] Support multi-world paths in `PathBaker` (do not force the first frame’s world)
 - [ ] Lock look / cancel interact, inventory, drop, and damage during playback

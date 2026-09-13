@@ -22,6 +22,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Particle
+import org.bukkit.World
 import org.bukkit.configuration.file.FileConfiguration
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
@@ -30,7 +31,9 @@ import org.bukkit.scheduler.BukkitTask
 import java.io.File
 import java.io.IOException
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
 class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface {
@@ -334,9 +337,6 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         playerSessions[playerId] = PlayerSession.Playback(playerId, name, 0, path.size)
         player.sendMessage(plugin.configManager.getMessage("cutscene-playing")?.replace("{name}", name) ?: "§aPlaying...")
 
-        player.teleport(path[0])
-        preloadChunksAsync(path)
-
         val onComplete = {
             Bukkit.getScheduler().runTask(plugin, Runnable {
                 val p = Bukkit.getPlayer(playerId)
@@ -358,15 +358,26 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             Unit
         }
 
-        val controller = AsyncPacketPlaybackController(
-            plugin,
-            settings.updateRate,
-            settings.rideHeightOffset,
-            onComplete,
-            onCancel
-        )
-        activeControllers[playerId] = controller
-        controller.start(player, path, totalDurationMs)
+        preloadChunks(path).whenComplete { _, error ->
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                if (error != null) {
+                    plugin.logger.warning("Chunk preload for '$name' did not finish cleanly: ${error.message}")
+                }
+                if (!player.isOnline || playerSessions[playerId] !is PlayerSession.Playback) {
+                    return@Runnable
+                }
+                player.teleport(path[0])
+                val controller = AsyncPacketPlaybackController(
+                    plugin,
+                    settings.updateRate,
+                    settings.rideHeightOffset,
+                    onComplete,
+                    onCancel
+                )
+                activeControllers[playerId] = controller
+                controller.start(player, path, totalDurationMs)
+            })
+        }
     }
 
     private fun createInterpolator(type: InterpolationType): PathInterpolator = when (type) {
@@ -386,24 +397,37 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         activeRecorders.remove(playerId)?.cancel()
     }
 
-    private fun preloadChunksAsync(frames: List<Location>) {
-        val world = frames.firstOrNull()?.world ?: return
-        val chunks = mutableSetOf<Pair<Int, Int>>()
+    private fun preloadChunks(frames: List<Location>): CompletableFuture<Void> {
+        val world = frames.firstOrNull()?.world ?: return CompletableFuture.completedFuture(null)
+        val chunks = linkedSetOf<Pair<Int, Int>>()
         frames.forEach { f ->
             val cx = f.blockX shr 4
             val cz = f.blockZ shr 4
             for (dx in -2..2) for (dz in -2..2) chunks.add((cx + dx) to (cz + dz))
         }
-        chunks.forEach { (cx, cz) ->
-            if (!world.isChunkLoaded(cx, cz)) {
-                try {
-                    world.getChunkAtAsync(cx, cz)
-                } catch (_: NoSuchMethodError) {
-                    plugin.server.scheduler.runTaskAsynchronously(plugin, Runnable { world.loadChunk(cx, cz, false) })
-                }
-            }
-        }
+
         plugin.logger.info("Preloading ${chunks.size} chunks for cutscene...")
+
+        val futures = chunks.map { (cx, cz) -> loadChunk(world, cx, cz) }
+        return CompletableFuture.allOf(*futures.toTypedArray())
+            .orTimeout(10, TimeUnit.SECONDS)
+            .exceptionally { null }
+    }
+
+    private fun loadChunk(world: org.bukkit.World, cx: Int, cz: Int): CompletableFuture<*> {
+        if (world.isChunkLoaded(cx, cz)) {
+            return CompletableFuture.completedFuture(null)
+        }
+        return try {
+            world.getChunkAtAsync(cx, cz)
+        } catch (_: NoSuchMethodError) {
+            val future = CompletableFuture<Void>()
+            plugin.server.scheduler.runTaskAsynchronously(plugin, Runnable {
+                world.loadChunk(cx, cz, false)
+                future.complete(null)
+            })
+            future
+        }
     }
 
     // Path visualization
