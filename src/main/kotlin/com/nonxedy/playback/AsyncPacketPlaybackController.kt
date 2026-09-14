@@ -14,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 // Packet-based cutscene playback
 class AsyncPacketPlaybackController(
@@ -33,6 +34,8 @@ class AsyncPacketPlaybackController(
     private var playerRef: Player? = null
     private var wasFlying = false
     private var wasAllowedFlight = false
+    private val lastFollowChunkX = AtomicInteger(Int.MIN_VALUE)
+    private val lastFollowChunkZ = AtomicInteger(Int.MIN_VALUE)
 
     override fun start(player: Player, path: List<Location>, totalDurationMs: Long) {
         if (path.isEmpty()) {
@@ -106,26 +109,8 @@ class AsyncPacketPlaybackController(
 
                 val progress = elapsed.toDouble() / totalDurationMs.toDouble()
                 val loc = samplePath(pathArray, lastIndex, progress)
-                val stand = carrier
-                if (stand == null || stand.isDead || !PacketEvents.getAPI().isInitialized) {
-                    return@scheduleWithFixedDelay
-                }
-
-                try {
-                    val carrierPacket = WrapperPlayServerEntityTeleport(
-                        stand.entityId,
-                        Vector3d(loc.x, loc.y + rideHeightOffset, loc.z),
-                        loc.yaw,
-                        loc.pitch,
-                        true
-                    )
-                    PacketEvents.getAPI().playerManager.sendPacket(player, carrierPacket)
-                    PacketEvents.getAPI().playerManager.sendPacket(
-                        player,
-                        WrapperPlayServerPlayerRotation(loc.yaw, loc.pitch)
-                    )
-                } catch (_: Exception) {
-                }
+                sendCameraPackets(player, loc)
+                followChunkIfNeeded(player, loc)
 
                 val index = (progress * lastIndex).toInt().coerceIn(0, lastIndex)
                 if (index % (updateRate / 4).coerceAtLeast(1) == 0) {
@@ -175,6 +160,74 @@ class AsyncPacketPlaybackController(
         var delta = ((to - from) % 360f + 360f) % 360f
         if (delta > 180f) delta -= 360f
         return (from + delta * t).toFloat()
+    }
+
+    private fun sendCameraPackets(player: Player, loc: Location) {
+        if (!PacketEvents.getAPI().isInitialized) return
+        try {
+            val stand = carrier
+            if (stand != null && !stand.isDead) {
+                PacketEvents.getAPI().playerManager.sendPacket(
+                    player,
+                    WrapperPlayServerEntityTeleport(
+                        stand.entityId,
+                        Vector3d(loc.x, loc.y + rideHeightOffset, loc.z),
+                        loc.yaw,
+                        loc.pitch,
+                        true
+                    )
+                )
+            }
+            PacketEvents.getAPI().playerManager.sendPacket(
+                player,
+                WrapperPlayServerPlayerRotation(loc.yaw, loc.pitch)
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun followChunkIfNeeded(player: Player, loc: Location) {
+        val cx = loc.blockX shr 4
+        val cz = loc.blockZ shr 4
+        if (cx == lastFollowChunkX.get() && cz == lastFollowChunkZ.get()) return
+        lastFollowChunkX.set(cx)
+        lastFollowChunkZ.set(cz)
+        Bukkit.getScheduler().runTask(plugin, Runnable {
+            if (!active.get() || !player.isOnline) return@Runnable
+            keepCameraChunkLoaded(player, loc)
+        })
+    }
+
+    private fun keepCameraChunkLoaded(player: Player, loc: Location) {
+        val world = loc.world ?: return
+        val cx = loc.blockX shr 4
+        val cz = loc.blockZ shr 4
+        for (dx in -1..1) {
+            for (dz in -1..1) {
+                val x = cx + dx
+                val z = cz + dz
+                if (!world.isChunkLoaded(x, z)) {
+                    try {
+                        world.getChunkAtAsync(x, z)
+                    } catch (_: NoSuchMethodError) {
+                        world.loadChunk(x, z, true)
+                    }
+                }
+            }
+        }
+        if (!world.isChunkLoaded(cx, cz)) {
+            world.loadChunk(cx, cz, true)
+        }
+
+        val carrierLoc = loc.clone().add(0.0, rideHeightOffset, 0.0)
+        val stand = carrier
+        if (stand == null || stand.isDead) {
+            val spawned = spawnCarrier(player, loc)
+            carrier = spawned
+            spawned.addPassenger(player)
+        } else {
+            stand.teleport(carrierLoc)
+        }
     }
 
     private fun spawnCarrier(player: Player, at: Location): ArmorStand {

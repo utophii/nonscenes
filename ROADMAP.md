@@ -28,7 +28,7 @@
 
 - [x] Remove `LINEAR` interpolation
 - [x] Wait for chunk preload before starting playback
-- [ ] Do not skip camera updates when a chunk is unloaded
+- [x] Do not skip camera updates when a chunk is unloaded
 - [ ] Support multi-world paths in `PathBaker` (do not force the first frame’s world)
 - [ ] Lock look / cancel interact, inventory, drop, and damage during playback
 - [ ] Block Brigadier commands as well, not only `PlayerCommandPreprocessEvent`
