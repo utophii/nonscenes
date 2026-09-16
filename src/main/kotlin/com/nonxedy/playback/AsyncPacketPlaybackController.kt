@@ -146,6 +146,9 @@ class AsyncPacketPlaybackController(
 
         val from = path[idx]
         val to = path[(idx + 1).coerceAtMost(lastIndex)]
+        if (from.world != to.world) {
+            return if (frac < 1.0) from.clone() else to.clone()
+        }
 
         val x = from.x + (to.x - from.x) * frac
         val y = from.y + (to.y - from.y) * frac

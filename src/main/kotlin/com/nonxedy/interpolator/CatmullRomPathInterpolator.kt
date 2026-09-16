@@ -29,7 +29,12 @@ class CatmullRomPathInterpolator : PathInterpolator {
         val p1 = frames[i1].location
         val p2 = frames[i2].location
         val p3 = frames[i3].location
-        val world = p1.world ?: p0.world ?: p2.world ?: p3.world
+
+        if (frames[i1].worldName != frames[i2].worldName) {
+            return if (localT < 1f) frames[i1].toPathPoint(0L) else frames[i2].toPathPoint(0L)
+        }
+
+        val worldName = frames[i1].worldName
 
         val easedT = smoothStep(localT)
 
@@ -45,7 +50,7 @@ class CatmullRomPathInterpolator : PathInterpolator {
             z = z,
             yaw = yaw,
             pitch = pitch,
-            worldName = world?.name ?: frames[i1].worldName,
+            worldName = worldName,
             timeMs = 0L
         )
     }

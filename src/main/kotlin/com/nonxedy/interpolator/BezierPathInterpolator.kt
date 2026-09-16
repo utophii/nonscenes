@@ -27,10 +27,12 @@ class BezierPathInterpolator : PathInterpolator {
         val p1 = frames[i1].location
         val p2 = frames[i2].location
 
+        if (frames[i1].worldName != frames[i2].worldName) {
+            return if (localT < 1f) frames[i1].toPathPoint(0L) else frames[i2].toPathPoint(0L)
+        }
+
         val c1 = controlPoint(frames, i1, forward = true)
         val c2 = controlPoint(frames, i2, forward = false)
-
-        val world = p1.world ?: p2.world
 
         val pos = cubicBezier(
             Vector(p1.x, p1.y, p1.z),
@@ -48,7 +50,7 @@ class BezierPathInterpolator : PathInterpolator {
             z = pos.z,
             yaw = yaw,
             pitch = pitch,
-            worldName = world?.name ?: frames[i1].worldName,
+            worldName = frames[i1].worldName,
             timeMs = 0L
         )
     }

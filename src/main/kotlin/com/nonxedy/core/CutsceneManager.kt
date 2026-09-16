@@ -398,23 +398,25 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     private fun preloadChunks(frames: List<Location>): CompletableFuture<Void> {
-        val world = frames.firstOrNull()?.world ?: return CompletableFuture.completedFuture(null)
-        val chunks = linkedSetOf<Pair<Int, Int>>()
-        frames.forEach { f ->
-            val cx = f.blockX shr 4
-            val cz = f.blockZ shr 4
-            for (dx in -2..2) for (dz in -2..2) chunks.add((cx + dx) to (cz + dz))
+        val byWorld = frames.mapNotNull { loc -> loc.world?.let { it to loc } }.groupBy({ it.first }, { it.second })
+        if (byWorld.isEmpty()) return CompletableFuture.completedFuture(null)
+
+        val futures = byWorld.flatMap { (world, locs) ->
+            val chunks = linkedSetOf<Pair<Int, Int>>()
+            locs.forEach { f ->
+                val cx = f.blockX shr 4
+                val cz = f.blockZ shr 4
+                for (dx in -2..2) for (dz in -2..2) chunks.add((cx + dx) to (cz + dz))
+            }
+            plugin.logger.info("Preloading ${chunks.size} chunks in '${world.name}' for cutscene...")
+            chunks.map { (cx, cz) -> loadChunk(world, cx, cz) }
         }
-
-        plugin.logger.info("Preloading ${chunks.size} chunks for cutscene...")
-
-        val futures = chunks.map { (cx, cz) -> loadChunk(world, cx, cz) }
         return CompletableFuture.allOf(*futures.toTypedArray())
             .orTimeout(10, TimeUnit.SECONDS)
             .exceptionally { null }
     }
 
-    private fun loadChunk(world: org.bukkit.World, cx: Int, cz: Int): CompletableFuture<*> {
+    private fun loadChunk(world: World, cx: Int, cz: Int): CompletableFuture<*> {
         if (world.isChunkLoaded(cx, cz)) {
             return CompletableFuture.completedFuture(null)
         }
