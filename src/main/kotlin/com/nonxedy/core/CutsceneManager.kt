@@ -336,6 +336,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         val totalDurationMs = cutscene.frameDurationMs * (cutscene.frames.size - 1)
         playerSessions[playerId] = PlayerSession.Playback(playerId, name, 0, path.size)
         player.sendMessage(plugin.configManager.getMessage("cutscene-playing")?.replace("{name}", name) ?: "§aPlaying...")
+        player.updateCommands()
 
         val onComplete = {
             Bukkit.getScheduler().runTask(plugin, Runnable {
@@ -395,6 +396,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         sessionTasks.remove(playerId)?.cancel()
         activeControllers.remove(playerId)?.stop()
         activeRecorders.remove(playerId)?.cancel()
+        Bukkit.getPlayer(playerId)?.updateCommands()
     }
 
     private fun preloadChunks(frames: List<Location>): CompletableFuture<Void> {
