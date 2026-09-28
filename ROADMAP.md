@@ -32,7 +32,7 @@
 - [x] Support multi-world paths in `PathBaker` (do not force the first frame’s world)
 - [x] Lock look / cancel interact, inventory, drop, and damage during playback
 - [x] Block Brigadier commands as well, not only `PlayerCommandPreprocessEvent`
-- [ ] Make the SQLite connection safe (WAL + single-thread access)
+- [x] Make the SQLite connection safe (WAL + single-thread access)
 - [ ] Keep MySQL/Postgres credentials out of the JDBC URL; do not default `useSSL=false`
 
 ### Needed for 1.0

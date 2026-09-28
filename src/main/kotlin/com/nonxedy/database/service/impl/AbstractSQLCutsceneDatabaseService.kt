@@ -26,9 +26,11 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
     // Get a database connection, creating one if needed
     protected fun requireConnection(): Connection = connection ?: throw RuntimeException("Database not initialized")
 
+    protected open fun openConnection(): Connection = DriverManager.getConnection(getJdbcUrl())
+
     override fun initialize() {
         try {
-            connection = DriverManager.getConnection(getJdbcUrl())
+            connection = openConnection()
             createTables()
             logger.info("Database initialized successfully")
         } catch (e: Exception) {
