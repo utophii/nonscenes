@@ -1,6 +1,7 @@
 package com.nonxedy.database.service.impl
 
-// PostgreSQL implementation of CutsceneDatabaseService
+import java.util.Properties
+
 class PostgreSQLCutsceneDatabaseService(
     private val host: String,
     private val port: Int,
@@ -10,7 +11,12 @@ class PostgreSQLCutsceneDatabaseService(
 ) : AbstractSQLCutsceneDatabaseService() {
 
     override fun getJdbcUrl(): String {
-        return "jdbc:postgresql://$host:$port/$database?user=$username&password=$password"
+        return "jdbc:postgresql://$host:$port/$database"
+    }
+
+    override fun connectionProperties(): Properties = Properties().apply {
+        setProperty("user", username)
+        setProperty("password", password)
     }
 
     override fun getCreateTablesSQL(): Array<String> = arrayOf(

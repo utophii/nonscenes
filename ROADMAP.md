@@ -33,7 +33,7 @@
 - [x] Lock look / cancel interact, inventory, drop, and damage during playback
 - [x] Block Brigadier commands as well, not only `PlayerCommandPreprocessEvent`
 - [x] Make the SQLite connection safe (WAL + single-thread access)
-- [ ] Keep MySQL/Postgres credentials out of the JDBC URL; do not default `useSSL=false`
+- [x] Keep MySQL/Postgres credentials out of the JDBC URL; do not default `useSSL=false`
 
 ### Needed for 1.0
 

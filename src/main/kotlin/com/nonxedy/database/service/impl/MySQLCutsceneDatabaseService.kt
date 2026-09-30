@@ -1,6 +1,7 @@
 package com.nonxedy.database.service.impl
 
-// MySQL implementation of CutsceneDatabaseService
+import java.util.Properties
+
 class MySQLCutsceneDatabaseService(
     private val host: String,
     private val port: Int,
@@ -10,7 +11,12 @@ class MySQLCutsceneDatabaseService(
 ) : AbstractSQLCutsceneDatabaseService() {
 
     override fun getJdbcUrl(): String {
-        return "jdbc:mysql://$host:$port/$database?useSSL=false&serverTimezone=UTC&user=$username&password=$password"
+        return "jdbc:mysql://$host:$port/$database?serverTimezone=UTC"
+    }
+
+    override fun connectionProperties(): Properties = Properties().apply {
+        setProperty("user", username)
+        setProperty("password", password)
     }
 
     override fun getCreateTablesSQL(): Array<String> = arrayOf(
