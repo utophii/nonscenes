@@ -1,25 +1,30 @@
 package com.nonxedy.listener
 
 import com.nonxedy.Nonscenes
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
+import org.bukkit.event.player.PlayerCommandSendEvent
 
 class CommandBlockerListener(private val plugin: Nonscenes) : Listener {
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onPlayerCommand(event: PlayerCommandPreprocessEvent) {
-        val player = event.player
+        blockUnlessStop(event.player, event.message) { event.isCancelled = true }
+    }
 
-        // Check if player is currently watching a cutscene
-        if (plugin.cutsceneManager.isWatchingCutscene(player)) {
-            // Allow only the stop command during cutscene playback
-            val command = event.message.lowercase().trim()
-            if (!command.startsWith("/nonscene stop") && !command.startsWith("/ns stop")) {
-                event.isCancelled = true
-                val message = plugin.configManager.getMessage("command-disabled-during-cutscene")
-                player.sendMessage(message)
-            }
-        }
+    @EventHandler(priority = EventPriority.HIGH)
+    fun onCommandSend(event: PlayerCommandSendEvent) {
+        if (!plugin.cutsceneManager.isWatchingCutscene(event.player)) return
+        event.commands.removeIf { it != "nonscene" && it != "ns" }
+    }
+
+    private fun blockUnlessStop(player: Player, message: String, cancel: () -> Unit) {
+        if (!plugin.cutsceneManager.isWatchingCutscene(player)) return
+        if (PlaybackCommandPolicy.isAllowedDuringPlayback(message)) return
+        cancel()
+        player.sendMessage(plugin.configManager.getMessage("command-disabled-during-cutscene"))
     }
 }

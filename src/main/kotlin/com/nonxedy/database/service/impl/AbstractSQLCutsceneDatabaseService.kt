@@ -7,6 +7,7 @@ import org.bukkit.Location
 import java.sql.Connection
 import java.sql.DatabaseMetaData
 import java.sql.DriverManager
+import java.util.Properties
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -26,9 +27,17 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
     // Get a database connection, creating one if needed
     protected fun requireConnection(): Connection = connection ?: throw RuntimeException("Database not initialized")
 
+    protected open fun connectionProperties(): Properties? = null
+
+    protected open fun openConnection(): Connection {
+        val props = connectionProperties()
+        return if (props == null) DriverManager.getConnection(getJdbcUrl())
+        else DriverManager.getConnection(getJdbcUrl(), props)
+    }
+
     override fun initialize() {
         try {
-            connection = DriverManager.getConnection(getJdbcUrl())
+            connection = openConnection()
             createTables()
             logger.info("Database initialized successfully")
         } catch (e: Exception) {

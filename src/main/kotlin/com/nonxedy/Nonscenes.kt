@@ -9,6 +9,8 @@ import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManager
 import com.nonxedy.core.CutsceneManagerInterface
 import com.nonxedy.listener.CommandBlockerListener
+import com.nonxedy.listener.PlaybackGuardListener
+import com.nonxedy.listener.PlaybackLookLock
 import com.nonxedy.listener.PlayerStateRestorer
 import java.util.logging.Logger
 
@@ -36,9 +38,9 @@ class Nonscenes : JavaPlugin() {
 
             // Register command blocker listener
             server.pluginManager.registerEvents(CommandBlockerListener(this), this)
-
-            // Register player state restorer listener
+            server.pluginManager.registerEvents(PlaybackGuardListener(this), this)
             server.pluginManager.registerEvents(PlayerStateRestorer(this), this)
+            PacketEvents.getAPI().eventManager.registerListener(com.nonxedy.listener.PlaybackLookLock(this))
 
             logger.info("nonscenes enabled with cutscene functionality")
         } catch (e: Exception) {

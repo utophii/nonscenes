@@ -40,6 +40,28 @@ class PathInterpolatorTest {
     }
 
     @Test
+    fun `does not blend coordinates across different worlds`() {
+        val overworld = Mockito.mock(World::class.java)
+        val nether = Mockito.mock(World::class.java)
+        Mockito.`when`(overworld.name).thenReturn("world")
+        Mockito.`when`(nether.name).thenReturn("world_nether")
+
+        val frames = listOf(
+            CutsceneFrame(Location(overworld, 0.0, 64.0, 0.0), "world"),
+            CutsceneFrame(Location(nether, 100.0, 32.0, 100.0), "world_nether")
+        )
+        listOf(CatmullRomPathInterpolator(), BezierPathInterpolator()).forEach { interp ->
+            val before = interp.interpolate(frames, 0.25)
+            assertEquals("world", before.worldName, "${interp::class.simpleName} mixed worlds too early")
+            assertEquals(0.0, before.x, 0.001)
+
+            val end = interp.interpolate(frames, 1.0)
+            assertEquals("world_nether", end.worldName, "${interp::class.simpleName} missed destination world")
+            assertEquals(100.0, end.x, 0.001)
+        }
+    }
+
+    @Test
     fun `single frame always returns same point`() {
         val frames = listOf(frame(3.0, 4.0, 5.0))
         listOf(CatmullRomPathInterpolator(), BezierPathInterpolator()).forEach { interp ->
