@@ -1,5 +1,6 @@
 package com.nonxedy.command
 
+import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -15,60 +16,104 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
     private val cutsceneManager: CutsceneManagerInterface by lazy { plugin.cutsceneManager }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
-        if (sender !is Player) {
-            val message = configManager.getMessage("player-only-command")
-            sender.sendMessage(message)
-            return true
-        }
-
-        val player: Player = sender
-
-        // Check if player has permission
-        if (!player.hasPermission("nonscene.use")) {
-            val message = configManager.getMessage("no-permission")
-            player.sendMessage(message)
-            return true
-        }
-
         if (args.isEmpty()) {
-            sendHelpMessage(player)
+            if (sender is Player) sendHelpMessage(sender)
+            else sender.sendMessage(configManager.getMessage("invalid-play-args"))
             return true
         }
 
-        val subCommand = args[0].lowercase()
+        when (args[0].lowercase()) {
+            "play" -> handlePlay(sender, args)
+            "start", "delete", "all", "showpath", "stop" -> {
+                if (sender !is Player) {
+                    sender.sendMessage(configManager.getMessage("player-only-command"))
+                    return true
+                }
+                if (!sender.hasPermission("nonscene.use")) {
+                    sender.sendMessage(configManager.getMessage("no-permission"))
+                    return true
+                }
+                handlePlayerCommand(sender, args)
+            }
+            else -> {
+                if (sender is Player) sendHelpMessage(sender)
+                else sender.sendMessage(configManager.getMessage("invalid-play-args"))
+            }
+        }
 
-        when (subCommand) {
+        return true
+    }
+
+    private fun handlePlay(sender: CommandSender, args: Array<String>) {
+        if (!sender.hasPermission("nonscene.play")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+
+        if (args.size < 2) {
+            sender.sendMessage(configManager.getMessage("invalid-play-args"))
+            return
+        }
+
+        val name = args[1]
+        val target: Player? = when {
+            args.size >= 3 -> Bukkit.getPlayerExact(args[2])
+            sender is Player -> sender
+            else -> {
+                sender.sendMessage(configManager.getMessage("invalid-play-args"))
+                return
+            }
+        }
+
+        if (target == null) {
+            sender.sendMessage(
+                configManager.getMessage("player-not-online").replace("{player}", args[2])
+            )
+            return
+        }
+
+        if (target != sender && !sender.hasPermission("nonscene.play.others")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+
+        if (cutsceneManager.hasActiveSession(target)) {
+            sender.sendMessage(configManager.getMessage("already-playing"))
+            return
+        }
+
+        cutsceneManager.playCutscene(target, name)
+        if (sender != target) {
+            sender.sendMessage(
+                configManager.getMessage("playing-for-player")
+                    .replace("{name}", name)
+                    .replace("{player}", target.name)
+            )
+        }
+    }
+
+    private fun handlePlayerCommand(player: Player, args: Array<String>) {
+        when (args[0].lowercase()) {
             "start" -> {
                 if (!player.hasPermission("nonscene.start")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("no-permission"))
+                    return
                 }
 
                 if (args.size < 3) {
-                    val message = configManager.getMessage("invalid-start-args")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("invalid-start-args"))
+                    return
                 }
 
                 val name = args[1]
                 if (!CutsceneNames.isValid(name)) {
                     player.sendMessage(configManager.getMessage("invalid-cutscene-name"))
-                    return true
+                    return
                 }
-                val seconds: Int
-
-                try {
-                    seconds = args[2].toInt()
-                    if (seconds <= 0 || seconds > 300) {
-                        val message = configManager.getMessage("invalid-duration")
-                        player.sendMessage(message)
-                        return true
-                    }
-                } catch (e: NumberFormatException) {
-                    val message = configManager.getMessage("invalid-duration")
-                    player.sendMessage(message)
-                    return true
+                val seconds = args[2].toIntOrNull()
+                if (seconds == null || seconds <= 0 || seconds > 300) {
+                    player.sendMessage(configManager.getMessage("invalid-duration"))
+                    return
                 }
 
                 cutsceneManager.startRecording(player, name, seconds)
@@ -76,15 +121,13 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
 
             "delete" -> {
                 if (!player.hasPermission("nonscene.delete")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("no-permission"))
+                    return
                 }
 
                 if (args.size < 2) {
-                    val message = configManager.getMessage("specify-cutscene-name")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("specify-cutscene-name"))
+                    return
                 }
 
                 cutsceneManager.deleteCutscene(player, args[1])
@@ -92,100 +135,79 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
 
             "all" -> {
                 if (!player.hasPermission("nonscene.list")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("no-permission"))
+                    return
                 }
 
                 cutsceneManager.listAllCutscenes(player)
             }
 
-            "play" -> {
-                if (!player.hasPermission("nonscene.play")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
-                }
-
-                if (args.size < 2) {
-                    val message = configManager.getMessage("specify-cutscene-name")
-                    player.sendMessage(message)
-                    return true
-                }
-
-                cutsceneManager.playCutscene(player, args[1])
-            }
-
             "showpath" -> {
                 if (!player.hasPermission("nonscene.showpath")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("no-permission"))
+                    return
                 }
-
                 if (args.size < 2) {
-                    val message = configManager.getMessage("specify-cutscene-name")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("specify-cutscene-name"))
+                    return
                 }
-
                 cutsceneManager.showCutscenePath(player, args[1])
             }
 
             "stop" -> {
                 if (!player.hasPermission("nonscene.stop")) {
-                    val message = configManager.getMessage("no-permission")
-                    player.sendMessage(message)
-                    return true
+                    player.sendMessage(configManager.getMessage("no-permission"))
+                    return
                 }
 
                 cutsceneManager.cancelAllSessions(player)
             }
-
-            else -> sendHelpMessage(player)
         }
-
-        return true
     }
 
     private fun sendHelpMessage(player: Player) {
-        val helpMessages = configManager.getMessageList("help-messages")
-
-        helpMessages.forEach { message ->
+        configManager.getMessageList("help-messages").forEach { message ->
             player.sendMessage(message)
         }
     }
 
-    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): MutableList<String> {
-        val completions = mutableListOf<String>()
-
-        if (sender !is Player) {
-            return completions
-        }
-
-        val player: Player = sender
-
+    override fun onTabComplete(
+        sender: CommandSender,
+        command: Command,
+        alias: String,
+        args: Array<String>
+    ): MutableList<String> {
         if (args.size == 1) {
             val subCommands = mutableListOf<String>()
-
-            if (player.hasPermission("nonscene.start")) subCommands.add("start")
-            if (player.hasPermission("nonscene.delete")) subCommands.add("delete")
-            if (player.hasPermission("nonscene.list")) subCommands.add("all")
-            if (player.hasPermission("nonscene.play")) subCommands.add("play")
-            if (player.hasPermission("nonscene.showpath")) subCommands.add("showpath")
-            if (player.hasPermission("nonscene.stop")) subCommands.add("stop")
-
+            if (sender.hasPermission("nonscene.play")) subCommands.add("play")
+            if (sender is Player) {
+                if (sender.hasPermission("nonscene.start")) subCommands.add("start")
+                if (sender.hasPermission("nonscene.delete")) subCommands.add("delete")
+                if (sender.hasPermission("nonscene.list")) subCommands.add("all")
+                if (sender.hasPermission("nonscene.showpath")) subCommands.add("showpath")
+                if (sender.hasPermission("nonscene.stop")) subCommands.add("stop")
+            }
             return filterCompletions(subCommands, args[0])
-        } else if (args.size == 2) {
-            val subCommand = args[0].lowercase()
+        }
 
-            if ((subCommand == "delete" || subCommand == "play" || subCommand == "showpath")
-                && player.hasPermission("nonscene.$subCommand")) {
+        if (args.size == 2) {
+            val subCommand = args[0].lowercase()
+            if (subCommand == "play" && sender.hasPermission("nonscene.play")) {
+                return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
+            }
+            if (sender is Player &&
+                (subCommand == "delete" || subCommand == "showpath") &&
+                sender.hasPermission("nonscene.$subCommand")
+            ) {
                 return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
             }
         }
 
-        return completions
+        if (args.size == 3 && args[0].equals("play", ignoreCase = true) && sender.hasPermission("nonscene.play.others")) {
+            return filterCompletions(Bukkit.getOnlinePlayers().map { it.name }, args[2])
+        }
+
+        return mutableListOf()
     }
 
     private fun filterCompletions(options: List<String>, input: String): MutableList<String> {

@@ -6,9 +6,11 @@ prefix: "&8[&#3498db&lnonscenes&8] &r"
 player-only-command: "${prefix}&#e74c3cThis command can only be used by players."
 no-permission: "${prefix}&#e74c3cYou don't have permission to use this command."
 invalid-start-args: "${prefix}&#e74c3cUsage: /nonscene start <name> <seconds>"
+invalid-play-args: "${prefix}&#e74c3cUsage: /nonscene play <name> [player]"
 invalid-duration: "${prefix}&#e74c3cDuration must be a positive number of seconds (1–300)."
 specify-cutscene-name: "${prefix}&#e74c3cPlease specify a cutscene name."
 invalid-cutscene-name: "${prefix}&#e74c3cCutscene names may only contain letters, digits, underscore and hyphen."
+player-not-online: "${prefix}&#e74c3cPlayer &#f39c12{player} &#e74c3cis not online."
 
 # Recording messages
 already-recording: "${prefix}&#e74c3cYou are already recording a cutscene."
@@ -23,6 +25,7 @@ recording-finished: "${prefix}&#2ecc71Cutscene &#f39c12{name} &#2ecc71recorded s
 # Playback messages
 cutscene-not-found: "${prefix}&#e74c3cCutscene &#f39c12{name} &#e74c3cnot found."
 cutscene-playing: "${prefix}&#2ecc71Playing cutscene &#f39c12{name}&#2ecc71..."
+playing-for-player: "${prefix}&#2ecc71Playing cutscene &#f39c12{name} &#2ecc71for &#f39c12{player}&#2ecc71."
 playback-cancelled: "${prefix}&#e74c3cPlayback of cutscene &#f39c12{name} &#e74c3ccancelled."
 cutscene-playback-finished: "${prefix}&#2ecc71Cutscene &#f39c12{name} &#2ecc71playback finished."
 already-playing: "${prefix}&#e74c3cYou are already watching a cutscene."
@@ -53,6 +56,6 @@ help-messages:
   - "&#3498db/nonscene stop &7- Cancel recording/playback"
   - "&#3498db/nonscene delete <name> &7- Delete a cutscene"
   - "&#3498db/nonscene all &7- List all cutscenes"
-  - "&#3498db/nonscene play <name> &7- Play a cutscene"
+  - "&#3498db/nonscene play <name> [player] &7- Play a cutscene"
   - "&#3498db/nonscene showpath <name> &7- Visualize cutscene path"
   - "&8&m------------------------------"
