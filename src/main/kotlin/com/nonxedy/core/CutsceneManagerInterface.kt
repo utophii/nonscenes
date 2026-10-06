@@ -5,7 +5,7 @@ import org.bukkit.entity.Player
 
 interface CutsceneManagerInterface {
     fun startRecording(player: Player, name: String, seconds: Int)
-    fun playCutscene(player: Player, name: String)
+    fun playCutscene(player: Player, name: String): Boolean
     fun deleteCutscene(player: Player, name: String)
     fun listAllCutscenes(player: Player)
     fun showCutscenePath(player: Player, name: String)

@@ -1,8 +1,11 @@
 package com.nonxedy
 
 import org.bukkit.command.PluginCommand
+import org.bukkit.plugin.ServicePriority
 import org.bukkit.plugin.java.JavaPlugin
 import com.github.retrooper.packetevents.PacketEvents
+import com.nonxedy.api.NonscenesAPI
+import com.nonxedy.api.NonscenesAPIImpl
 import com.nonxedy.command.NonsceneCommand
 import com.nonxedy.core.ConfigManager
 import com.nonxedy.core.ConfigManagerInterface
@@ -22,6 +25,8 @@ class Nonscenes : JavaPlugin() {
         private set
     lateinit var cutsceneManager: CutsceneManagerInterface
         private set
+    lateinit var api: NonscenesAPI
+        private set
 
     override fun onEnable() {
         try {
@@ -40,7 +45,8 @@ class Nonscenes : JavaPlugin() {
             server.pluginManager.registerEvents(CommandBlockerListener(this), this)
             server.pluginManager.registerEvents(PlaybackGuardListener(this), this)
             server.pluginManager.registerEvents(PlayerStateRestorer(this), this)
-            PacketEvents.getAPI().eventManager.registerListener(com.nonxedy.listener.PlaybackLookLock(this))
+            PacketEvents.getAPI().eventManager.registerListener(PlaybackLookLock(this))
+            server.servicesManager.register(NonscenesAPI::class.java, api, this, ServicePriority.Normal)
 
             logger.info("nonscenes enabled with cutscene functionality")
         } catch (e: Exception) {
@@ -61,6 +67,7 @@ class Nonscenes : JavaPlugin() {
         // Initialize cutscene manager with dependency injection
         val cutsceneManagerImpl = CutsceneManager(this)
         cutsceneManager = cutsceneManagerImpl
+        api = NonscenesAPIImpl(cutsceneManagerImpl)
     }
 
     private fun requirePacketEvents() {
@@ -78,9 +85,17 @@ class Nonscenes : JavaPlugin() {
     }
 
     override fun onDisable() {
+        if (::api.isInitialized) {
+            server.servicesManager.unregister(NonscenesAPI::class.java, api)
+        }
         if (::cutsceneManager.isInitialized) {
             cutsceneManager.cleanup()
         }
         logger.info("nonscenes disabled")
+    }
+
+    companion object {
+        @JvmStatic
+        fun getAPI(): NonscenesAPI = getPlugin(Nonscenes::class.java).api
     }
 }

@@ -297,23 +297,23 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     // Playback
-    override fun playCutscene(player: Player, name: String) {
+    override fun playCutscene(player: Player, name: String): Boolean {
         val playerId = player.uniqueId
         if (playerSessions.containsKey(playerId)) {
             player.sendMessage(plugin.configManager.getMessage("already-playing") ?: "")
-            return
+            return false
         }
         val cutscene = cutscenes[name.lowercase()]
         if (cutscene == null || cutscene.frames.isEmpty()) {
             player.sendMessage(plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cNot found")
-            return
+            return false
         }
 
         val resolvedFrames = resolveFrameLocations(cutscene.frames)
         if (resolvedFrames == null) {
             val worldName = findFirstMissingWorldName(cutscene.frames) ?: "unknown"
             player.sendMessage("§cUnable to play cutscene '$name': world '$worldName' is not loaded.")
-            return
+            return false
         }
 
         val settings = plugin.configManager.getPlaybackSettings()
@@ -330,7 +330,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
         if (path.isEmpty()) {
             player.sendMessage("§cCutscene '$name' produced an empty path.")
-            return
+            return false
         }
 
         val totalDurationMs = cutscene.frameDurationMs * (cutscene.frames.size - 1)
@@ -379,6 +379,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 controller.start(player, path, totalDurationMs)
             })
         }
+        return true
     }
 
     private fun createInterpolator(type: InterpolationType): PathInterpolator = when (type) {
