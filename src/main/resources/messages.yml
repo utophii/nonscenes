@@ -49,6 +49,16 @@ path-already-showing: "${prefix}&#e74c3cYou are already visualizing a cutscene p
 # Stop command messages
 nothing-to-cancel: "${prefix}&#e74c3cYou have no active recording, playback, or path visualization to cancel."
 
+# Timeline event messages
+invalid-event-args: "${prefix}&#e74c3cUsage: /nonscene event <add|list|clear> <name> [type] [seconds] [data]"
+invalid-event-type: "${prefix}&#e74c3cType must be title, sound, particle, console, or player."
+invalid-event-time: "${prefix}&#e74c3cTime must be a number of seconds (0 or more)."
+event-added: "${prefix}&#2ecc71Added &#f39c12{type} &#2ecc71event at &#e67e22{seconds}s &#2ecc71to &#f39c12{name}&#2ecc71."
+event-cleared: "${prefix}&#2ecc71Cleared timeline events for &#f39c12{name}&#2ecc71."
+event-list-header: "${prefix}&#f39c12Events for &#e67e22{name}&#f39c12:"
+event-list-item: "${prefix}&7#{index} &#3498db{seconds}s &#f39c12{type} &7{data}"
+event-list-empty: "${prefix}&#e74c3cCutscene &#f39c12{name} &#e74c3chas no timeline events."
+
 # Help messages
 help-messages:
   - "&8&m-----&r &#3498db&lNonScenes Commands &8&m-----"
@@ -57,5 +67,6 @@ help-messages:
   - "&#3498db/nonscene delete <name> &7- Delete a cutscene"
   - "&#3498db/nonscene all &7- List all cutscenes"
   - "&#3498db/nonscene play <name> [player] &7- Play a cutscene"
+  - "&#3498db/nonscene event add <name> <type> <seconds> <data> &7- Add a timeline event"
   - "&#3498db/nonscene showpath <name> &7- Visualize cutscene path"
   - "&8&m------------------------------"

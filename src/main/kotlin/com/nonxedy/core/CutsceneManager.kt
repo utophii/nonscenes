@@ -12,6 +12,8 @@ import com.nonxedy.interpolator.CatmullRomPathInterpolator
 import com.nonxedy.interpolator.PathInterpolator
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
+import com.nonxedy.model.timeline.TimelineEvent
+import com.nonxedy.model.timeline.TimelineEvents
 import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.playback.AsyncPacketPlaybackController
 import com.nonxedy.playback.CutscenePlaybackController
@@ -134,7 +136,20 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     plugin.logger.warning("Skipping cutscene with invalid name: ${file.name}")
                     continue
                 }
-                if (cutscenes.containsKey(name.lowercase())) continue
+                if (cutscenes.containsKey(name.lowercase())) {
+                    val existing = cutscenes[name.lowercase()]!!
+                    if (existing.events.isEmpty()) {
+                        val fileEvents = TimelineEvents.readYaml(config)
+                        if (fileEvents.isNotEmpty()) {
+                            val updated = existing.copy(events = fileEvents)
+                            cutscenes[name.lowercase()] = updated
+                            if (persistentStorageEnabled) {
+                                try { databaseService.saveCutscene(updated) } catch (_: Exception) { }
+                            }
+                        }
+                    }
+                    continue
+                }
                 val frames = mutableListOf<CutsceneFrame>()
                 val framesSection = config.getConfigurationSection("frames")
                 val frameDurationMs = loadFrameDurationMs(config)
@@ -155,7 +170,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     }
                 }
                 if (frames.isNotEmpty()) {
-                    val cutscene = Cutscene(name, frames, frameDurationMs)
+                    val events = TimelineEvents.readYaml(config)
+                    val cutscene = Cutscene(name, frames, frameDurationMs, events)
                     cutscenes[name.lowercase()] = cutscene
                     count++
                     if (persistentStorageEnabled) {
@@ -199,6 +215,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             config.set("frames.$i.yaw", f.location.yaw)
             config.set("frames.$i.pitch", f.location.pitch)
         }
+        TimelineEvents.writeYaml(config, cutscene.events)
         config.save(file)
     }
 
@@ -373,7 +390,9 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                     settings.updateRate,
                     settings.rideHeightOffset,
                     onComplete,
-                    onCancel
+                    onCancel,
+                    cutscene.events,
+                    name
                 )
                 activeControllers[playerId] = controller
                 controller.start(player, path, totalDurationMs)
@@ -592,6 +611,25 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun isWatchingCutscene(player: Player): Boolean = playerSessions[player.uniqueId] is PlayerSession.Playback
     override fun getCutsceneNames(): List<String> = cutscenes.keys.toList()
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
+
+    override fun addTimelineEvent(name: String, event: TimelineEvent): Boolean {
+        val key = name.lowercase()
+        val cutscene = cutscenes[key] ?: return false
+        val updated = cutscene.copy(events = (cutscene.events + event).sortedBy { it.timeMs })
+        cutscenes[key] = updated
+        saveCutscene(updated)
+        return true
+    }
+
+    override fun clearTimelineEvents(name: String): Boolean {
+        val key = name.lowercase()
+        val cutscene = cutscenes[key] ?: return false
+        if (cutscene.events.isEmpty()) return true
+        val updated = cutscene.copy(events = emptyList())
+        cutscenes[key] = updated
+        saveCutscene(updated)
+        return true
+    }
 
     // Helpers
     private fun cutsceneFile(name: String): File {

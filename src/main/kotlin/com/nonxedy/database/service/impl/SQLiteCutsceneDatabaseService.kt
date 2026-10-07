@@ -43,7 +43,8 @@ class SQLiteCutsceneDatabaseService(private val databaseFile: File) : AbstractSQ
             name TEXT PRIMARY KEY,
             frame_count INTEGER NOT NULL,
             ticks_per_frame INTEGER NOT NULL DEFAULT 1,
-            frame_duration_ms INTEGER NOT NULL DEFAULT 50
+            frame_duration_ms INTEGER NOT NULL DEFAULT 50,
+            events_text TEXT
         )
         """.trimIndent(),
 

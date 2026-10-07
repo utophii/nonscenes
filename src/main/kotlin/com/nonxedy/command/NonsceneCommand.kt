@@ -9,6 +9,8 @@ import org.bukkit.entity.Player
 import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManagerInterface
+import com.nonxedy.model.timeline.TimelineEvent
+import com.nonxedy.model.timeline.TimelineEventType
 import com.nonxedy.util.CutsceneNames
 
 class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompleter {
@@ -24,6 +26,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
 
         when (args[0].lowercase()) {
             "play" -> handlePlay(sender, args)
+            "event" -> handleEvent(sender, args)
             "start", "delete", "all", "showpath", "stop" -> {
                 if (sender !is Player) {
                     sender.sendMessage(configManager.getMessage("player-only-command"))
@@ -90,6 +93,101 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                     .replace("{player}", target.name)
             )
         }
+    }
+
+    private fun handleEvent(sender: CommandSender, args: Array<String>) {
+        if (!sender.hasPermission("nonscene.event")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+        if (args.size < 3) {
+            sender.sendMessage(configManager.getMessage("invalid-event-args"))
+            return
+        }
+        val action = args[1].lowercase()
+        val name = args[2]
+        val cutscene = cutsceneManager.getCutscene(name)
+        if (cutscene == null) {
+            sender.sendMessage(configManager.getMessage("cutscene-not-found").replace("{name}", name))
+            return
+        }
+        when (action) {
+            "list" -> {
+                if (cutscene.events.isEmpty()) {
+                    sender.sendMessage(configManager.getMessage("event-list-empty").replace("{name}", cutscene.name))
+                    return
+                }
+                sender.sendMessage(configManager.getMessage("event-list-header").replace("{name}", cutscene.name))
+                cutscene.events.forEachIndexed { index, event ->
+                    sender.sendMessage(
+                        configManager.getMessage("event-list-item")
+                            .replace("{index}", index.toString())
+                            .replace("{seconds}", (event.timeMs / 1000.0).toString())
+                            .replace("{type}", event.type.name.lowercase())
+                            .replace("{data}", event.args.values.joinToString(" "))
+                    )
+                }
+            }
+            "clear" -> {
+                cutsceneManager.clearTimelineEvents(name)
+                sender.sendMessage(configManager.getMessage("event-cleared").replace("{name}", cutscene.name))
+            }
+            "add" -> {
+                if (args.size < 6) {
+                    sender.sendMessage(configManager.getMessage("invalid-event-args"))
+                    return
+                }
+                val type = runCatching { TimelineEventType.valueOf(args[3].uppercase()) }.getOrNull()
+                if (type == null) {
+                    sender.sendMessage(configManager.getMessage("invalid-event-type"))
+                    return
+                }
+                val seconds = args[4].toDoubleOrNull()
+                if (seconds == null || seconds < 0) {
+                    sender.sendMessage(configManager.getMessage("invalid-event-time"))
+                    return
+                }
+                val rest = args.copyOfRange(5, args.size)
+                val event = buildEvent(type, (seconds * 1000).toLong(), rest) ?: run {
+                    sender.sendMessage(configManager.getMessage("invalid-event-args"))
+                    return
+                }
+                cutsceneManager.addTimelineEvent(name, event)
+                sender.sendMessage(
+                    configManager.getMessage("event-added")
+                        .replace("{name}", cutscene.name)
+                        .replace("{type}", type.name.lowercase())
+                        .replace("{seconds}", seconds.toString())
+                )
+            }
+            else -> sender.sendMessage(configManager.getMessage("invalid-event-args"))
+        }
+    }
+
+    private fun buildEvent(type: TimelineEventType, timeMs: Long, rest: Array<String>): TimelineEvent? {
+        if (rest.isEmpty()) return null
+        val args = linkedMapOf<String, String>()
+        when (type) {
+            TimelineEventType.TITLE -> {
+                val joined = rest.joinToString(" ")
+                val parts = joined.split("|", limit = 2)
+                args["title"] = parts[0].trim()
+                args["subtitle"] = parts.getOrNull(1)?.trim().orEmpty()
+            }
+            TimelineEventType.SOUND -> {
+                args["sound"] = rest[0]
+                args["volume"] = rest.getOrNull(1) ?: "1"
+                args["pitch"] = rest.getOrNull(2) ?: "1"
+            }
+            TimelineEventType.PARTICLE -> {
+                args["particle"] = rest[0]
+                args["count"] = rest.getOrNull(1) ?: "10"
+            }
+            TimelineEventType.CONSOLE, TimelineEventType.PLAYER -> {
+                args["command"] = rest.joinToString(" ")
+            }
+        }
+        return TimelineEvent(timeMs, type, args)
     }
 
     private fun handlePlayerCommand(player: Player, args: Array<String>) {
@@ -180,6 +278,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         if (args.size == 1) {
             val subCommands = mutableListOf<String>()
             if (sender.hasPermission("nonscene.play")) subCommands.add("play")
+            if (sender.hasPermission("nonscene.event")) subCommands.add("event")
             if (sender is Player) {
                 if (sender.hasPermission("nonscene.start")) subCommands.add("start")
                 if (sender.hasPermission("nonscene.delete")) subCommands.add("delete")
@@ -205,6 +304,14 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
 
         if (args.size == 3 && args[0].equals("play", ignoreCase = true) && sender.hasPermission("nonscene.play.others")) {
             return filterCompletions(Bukkit.getOnlinePlayers().map { it.name }, args[2])
+        }
+
+        if (args[0].equals("event", ignoreCase = true) && sender.hasPermission("nonscene.event")) {
+            if (args.size == 2) return filterCompletions(listOf("add", "list", "clear"), args[1])
+            if (args.size == 3) return filterCompletions(cutsceneManager.getCutsceneNames(), args[2])
+            if (args.size == 4 && args[1].equals("add", ignoreCase = true)) {
+                return filterCompletions(listOf("title", "sound", "particle", "console", "player"), args[3])
+            }
         }
 
         return mutableListOf()

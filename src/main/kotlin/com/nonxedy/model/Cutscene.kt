@@ -1,12 +1,14 @@
 package com.nonxedy.model
 
+import com.nonxedy.model.timeline.TimelineEvent
 import kotlin.math.ceil
 
 // Represents a cutscene with a name and a list of frames
 data class Cutscene(
     val name: String,
     val frames: List<CutsceneFrame>,
-    val frameDurationMs: Long = 50L
+    val frameDurationMs: Long = 50L,
+    val events: List<TimelineEvent> = emptyList()
 ) {
     constructor(name: String, frames: List<CutsceneFrame>, ticksPerFrame: Int) : this(
         name,

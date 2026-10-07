@@ -25,7 +25,8 @@ class MySQLCutsceneDatabaseService(
             name VARCHAR(255) PRIMARY KEY,
             frame_count INT NOT NULL,
             ticks_per_frame INT NOT NULL DEFAULT 1,
-            frame_duration_ms BIGINT NOT NULL DEFAULT 50
+            frame_duration_ms BIGINT NOT NULL DEFAULT 50,
+            events_text LONGTEXT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """.trimIndent(),
 

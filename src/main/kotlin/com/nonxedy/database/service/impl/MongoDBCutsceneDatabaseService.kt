@@ -77,6 +77,7 @@ class MongoDBCutsceneDatabaseService(
             }
 
             cutsceneDoc.append("frames", framesArray)
+            cutsceneDoc.append("events", com.nonxedy.model.timeline.TimelineEvents.toMongo(cutscene.events))
             collection.insertOne(cutsceneDoc)
 
         } catch (e: Exception) {
@@ -119,7 +120,10 @@ class MongoDBCutsceneDatabaseService(
                 }
 
                 if (frames.isNotEmpty()) {
-                    cutscenes.add(Cutscene(name, frames, frameDurationMs))
+                    val events = com.nonxedy.model.timeline.TimelineEvents.fromMongo(
+                        try { doc.getList("events", Document::class.java) } catch (_: Exception) { null }
+                    )
+                    cutscenes.add(Cutscene(name, frames, frameDurationMs, events))
                 }
             }
 

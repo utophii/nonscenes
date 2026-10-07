@@ -1,6 +1,7 @@
 package com.nonxedy.core
 
 import com.nonxedy.model.Cutscene
+import com.nonxedy.model.timeline.TimelineEvent
 import org.bukkit.entity.Player
 
 interface CutsceneManagerInterface {
@@ -21,6 +22,8 @@ interface CutsceneManagerInterface {
 
     fun getCutsceneNames(): List<String>
     fun getCutscene(name: String): Cutscene?
+    fun addTimelineEvent(name: String, event: TimelineEvent): Boolean
+    fun clearTimelineEvents(name: String): Boolean
 
     fun cleanup()
 }

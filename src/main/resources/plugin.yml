@@ -45,6 +45,9 @@ permissions:
   nonscene.stop:
     description: Allows cancelling recording/playback
     default: op
+  nonscene.event:
+    description: Allows editing cutscene timeline events
+    default: op
   nonscene.admin:
     description: Grants all nonscene permissions
     default: op
@@ -57,3 +60,4 @@ permissions:
       nonscene.play.others: true
       nonscene.showpath: true
       nonscene.stop: true
+      nonscene.event: true

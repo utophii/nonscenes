@@ -74,11 +74,12 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
             }
 
             // Insert cutscene
-            conn.prepareStatement("INSERT INTO cutscenes (name, frame_count, ticks_per_frame, frame_duration_ms) VALUES (?, ?, ?, ?)").use { stmt ->
+            conn.prepareStatement("INSERT INTO cutscenes (name, frame_count, ticks_per_frame, frame_duration_ms, events_text) VALUES (?, ?, ?, ?, ?)").use { stmt ->
                 stmt.setString(1, cutscene.name)
                 stmt.setInt(2, cutscene.frames.size)
                 stmt.setInt(3, cutscene.ticksPerFrame)
                 stmt.setLong(4, cutscene.frameDurationMs)
+                stmt.setString(5, com.nonxedy.model.timeline.TimelineEvents.encode(cutscene.events))
                 stmt.executeUpdate()
             }
 
@@ -117,7 +118,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         val cutscenes = mutableListOf<Cutscene>()
 
         conn.prepareStatement("""
-            SELECT c.name, c.ticks_per_frame, c.frame_duration_ms, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch
+            SELECT c.name, c.ticks_per_frame, c.frame_duration_ms, c.events_text, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch
             FROM cutscenes c
             JOIN cutscene_frames f ON c.name = f.cutscene_name
             ORDER BY c.name, f.frame_index
@@ -130,16 +131,17 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
                     val name = rs.getString("name")
                     val ticksPerFrame = rs.getInt("ticks_per_frame").coerceAtLeast(1)
                     val frameDurationMs = rs.getLong("frame_duration_ms").takeIf { it > 0L } ?: (ticksPerFrame * 50L)
+                    val events = com.nonxedy.model.timeline.TimelineEvents.decode(
+                        try { rs.getString("events_text") } catch (_: Exception) { null }
+                    )
 
                     if (currentCutscene == null || currentCutscene.name != name) {
-                        // Save previous cutscene
                         if (currentCutscene != null && currentFrames.isNotEmpty()) {
                             cutscenes.add(currentCutscene)
                         }
 
-                        // Start new cutscene
                         currentFrames = mutableListOf()
-                        currentCutscene = Cutscene(name, currentFrames, frameDurationMs)
+                        currentCutscene = Cutscene(name, currentFrames, frameDurationMs, events)
                     }
 
                     // Add frame
@@ -232,6 +234,12 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         if (!columnExists(metadata, "cutscenes", "frame_duration_ms")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscenes ADD COLUMN frame_duration_ms BIGINT NOT NULL DEFAULT 50")
+            }
+        }
+
+        if (!columnExists(metadata, "cutscenes", "events_text")) {
+            conn.createStatement().use { stmt ->
+                stmt.execute("ALTER TABLE cutscenes ADD COLUMN events_text TEXT")
             }
         }
     }

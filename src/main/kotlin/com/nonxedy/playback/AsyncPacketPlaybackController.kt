@@ -4,6 +4,7 @@ import com.github.retrooper.packetevents.PacketEvents
 import com.github.retrooper.packetevents.util.Vector3d
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerRotation
+import com.nonxedy.model.timeline.TimelineEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -22,7 +23,9 @@ class AsyncPacketPlaybackController(
     private val updateRate: Int,
     private val rideHeightOffset: Double,
     private val onComplete: () -> Unit,
-    private val onCancel: () -> Unit
+    private val onCancel: () -> Unit,
+    private val timelineEvents: List<TimelineEvent> = emptyList(),
+    private val cutsceneName: String = ""
 ) : CutscenePlaybackController {
 
     private val active = AtomicBoolean(false)
@@ -81,6 +84,7 @@ class AsyncPacketPlaybackController(
         val lastIndex = pathArray.lastIndex
         val intervalNs = 1_000_000_000L / updateRate
         val startTime = System.currentTimeMillis()
+        val timeline = TimelineClock(plugin, player, cutsceneName, timelineEvents)
 
         executor = Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "nonscenes-async-playback-${player.uniqueId.toString().take(8)}")
@@ -97,6 +101,7 @@ class AsyncPacketPlaybackController(
                 }
 
                 val elapsed = System.currentTimeMillis() - startTime
+                timeline.pulse(elapsed)
                 if (elapsed >= totalDurationMs) {
                     active.set(false)
                     shutdown()

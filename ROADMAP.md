@@ -39,7 +39,7 @@
 
 - [x] Console / other-player playback: `/nonscene play <name> [player]`
 - [x] Tiny public API (`play`, `stop`, `isPlaying`) for quests and other plugins
-- [ ] Timeline events: title, sound, particles, console/player commands
+- [x] Timeline events: title, sound, particles, console/player commands
 - [ ] Triggers: first join, region, custom command
 - [ ] Fade in/out and a proper camera lock (not only an armor stand)
 - [ ] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
