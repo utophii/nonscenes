@@ -11,6 +11,7 @@ import com.nonxedy.core.ConfigManager
 import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManager
 import com.nonxedy.core.CutsceneManagerInterface
+import com.nonxedy.core.TriggerService
 import com.nonxedy.listener.CommandBlockerListener
 import com.nonxedy.listener.PlaybackGuardListener
 import com.nonxedy.listener.PlaybackLookLock
@@ -27,6 +28,7 @@ class Nonscenes : JavaPlugin() {
         private set
     lateinit var api: NonscenesAPI
         private set
+    private var triggerService: TriggerService? = null
 
     override fun onEnable() {
         try {
@@ -47,6 +49,7 @@ class Nonscenes : JavaPlugin() {
             server.pluginManager.registerEvents(PlayerStateRestorer(this), this)
             PacketEvents.getAPI().eventManager.registerListener(PlaybackLookLock(this))
             server.servicesManager.register(NonscenesAPI::class.java, api, this, ServicePriority.Normal)
+            triggerService = TriggerService(this).also { it.register() }
 
             logger.info("nonscenes enabled with cutscene functionality")
         } catch (e: Exception) {
@@ -85,6 +88,8 @@ class Nonscenes : JavaPlugin() {
     }
 
     override fun onDisable() {
+        triggerService?.unregister()
+        triggerService = null
         if (::api.isInitialized) {
             server.servicesManager.unregister(NonscenesAPI::class.java, api)
         }

@@ -55,7 +55,33 @@ cutscene:
     capture-interval-ticks: 1
 
 # ---------------------------------------------------------------------------
-# Storage configuration (unchanged)
+# Triggers
+# ---------------------------------------------------------------------------
+triggers:
+  first-join:
+    enabled: false
+    cutscene: intro
+    delay-ticks: 40
+
+  # Maps a custom command to a cutscene. Example: /intro plays "spawn_tour".
+  commands: {}
+  # intro: spawn_tour
+
+  # Axis-aligned regions. Fires when a player walks in.
+  regions: {}
+  # spawn:
+  #   world: world
+  #   min-x: 0
+  #   min-y: 64
+  #   min-z: 0
+  #   max-x: 20
+  #   max-y: 90
+  #   max-z: 20
+  #   cutscene: spawn_intro
+  #   once: true
+
+# ---------------------------------------------------------------------------
+# Storage configuration
 # ---------------------------------------------------------------------------
 storage:
   type: SQLITE
