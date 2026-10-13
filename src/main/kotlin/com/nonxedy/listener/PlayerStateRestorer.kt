@@ -1,12 +1,15 @@
 package com.nonxedy.listener
 
 import com.nonxedy.Nonscenes
+import com.nonxedy.playback.PlaybackRecovery
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 
 class PlayerStateRestorer(private val plugin: Nonscenes) : Listener {
+
+    private val recovery = PlaybackRecovery(plugin)
 
     @EventHandler
     fun onPlayerQuit(event: PlayerQuitEvent) {
@@ -20,11 +23,7 @@ class PlayerStateRestorer(private val plugin: Nonscenes) : Listener {
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
-        val player = event.player
-
-        // Check if player has a saved location from an interrupted cutscene
-        // This shouldn't normally happen since cancelPlayback is called on quit,
-        // but this is a safety net in case of server crashes or other issues
-        // For now, don't need to do anything special on join since cleanup() clears everything on shutdown
+        // the server stopped mid-cutscene: put the player back where the cutscene found them
+        recovery.restore(event.player)
     }
 }

@@ -18,6 +18,7 @@ import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.playback.AsyncPacketPlaybackController
 import com.nonxedy.playback.CutscenePlaybackController
 import com.nonxedy.playback.PathBaker
+import com.nonxedy.playback.PlaybackRecovery
 import com.nonxedy.recording.CutsceneRecorder
 import com.nonxedy.util.CutsceneNames
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -35,6 +36,8 @@ import java.io.IOException
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
@@ -47,6 +50,12 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     private val sessionTasks = ConcurrentHashMap<UUID, BukkitTask>()
     private val activeControllers = ConcurrentHashMap<UUID, CutscenePlaybackController>()
     private val activeRecorders = ConcurrentHashMap<UUID, CutsceneRecorder>()
+
+    // one camera thread for every viewer
+    private val playbackExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "nonscenes-playback").apply { isDaemon = true }
+    }
+    private val playbackRecovery = PlaybackRecovery(plugin)
 
     private val cutsceneFolder = File(plugin.dataFolder, "cutscenes")
 
@@ -386,6 +395,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 }
                 val controller = AsyncPacketPlaybackController(
                     plugin,
+                    playbackExecutor,
+                    playbackRecovery,
                     settings.updateRate,
                     settings.eyeHeight,
                     settings.fade,
@@ -656,6 +667,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun cleanup() {
         for (task in sessionTasks.values) task?.cancel()
         for (controller in activeControllers.values) controller.stop()
+        playbackExecutor.shutdownNow()
         for (recorder in activeRecorders.values) recorder.cancel()
         for (cutscene in cutscenes.values) {
             try { saveCutscene(cutscene) } catch (e: Exception) {

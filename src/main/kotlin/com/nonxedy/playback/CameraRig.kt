@@ -18,15 +18,23 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.logging.Level
+import java.util.logging.Logger
 
 // Client-side only camera. The viewer looks through an invisible marker armor
 // stand that exists only in their client, and is switched to spectator mode
 // locally so the hotbar, hand and input are gone. The server never sees either
 // change, so nothing has to be undone if the player disconnects.
-class CameraRig(private val player: Player, private val eyeHeight: Double) {
+class CameraRig(
+    private val player: Player,
+    private val eyeHeight: Double,
+    private val logger: Logger
+) {
 
     private val entityId = Bukkit.getUnsafe().nextEntityId()
     private val uuid = UUID.randomUUID()
+    private val failureLogged = AtomicBoolean(false)
 
     @Volatile
     private var attached = false
@@ -89,7 +97,11 @@ class CameraRig(private val player: Player, private val eyeHeight: Double) {
         if (!PacketEvents.getAPI().isInitialized) return
         try {
             PacketEvents.getAPI().playerManager.sendPacket(player, packet)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // logged once per rig
+            if (failureLogged.compareAndSet(false, true)) {
+                logger.log(Level.WARNING, "Failed to send camera packet to ${player.name}", e)
+            }
         }
     }
 

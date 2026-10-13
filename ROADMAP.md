@@ -21,7 +21,7 @@
 - [ ] Return original cutscene names from `getCutsceneNames()` (not lowercase map keys)
 - [ ] Fix mixed-up cancel messages and add the missing `error-occurred` key
 - [ ] Use or remove `smooth-rotation` and other unused config options
-- [ ] Delete empty `PlayerStateRestorer.onPlayerJoin` or actually restore location after a crash
+- [x] Delete empty `PlayerStateRestorer.onPlayerJoin` or actually restore location after a crash
 - [ ] Use `plugin.logger` instead of a raw `Logger.getLogger("nonscenes")`
 
 ### Playback / recording correctness
