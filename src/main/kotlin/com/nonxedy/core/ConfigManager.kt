@@ -1,6 +1,8 @@
 package com.nonxedy.core
 
 import com.nonxedy.Nonscenes
+import com.nonxedy.model.playback.FadeMode
+import com.nonxedy.model.playback.FadeSettings
 import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.model.playback.PlaybackSettings
 import com.nonxedy.model.recording.RecordingSettings
@@ -173,7 +175,27 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
             interpolation = interpolation,
             smoothRotation = cfg.getBoolean("cutscene.playback.smooth-rotation", true),
             bakePath = cfg.getBoolean("cutscene.playback.bake-path", true),
-            rideHeightOffset = cfg.getDouble("cutscene.playback.ride-height-offset", 0.75)
+            eyeHeight = cfg.getDouble("cutscene.playback.eye-height", 1.62),
+            fade = getFadeSettings(cfg)
+        )
+    }
+
+    private fun getFadeSettings(cfg: FileConfiguration): FadeSettings {
+        val mode = runCatching {
+            FadeMode.valueOf(cfg.getString("cutscene.playback.fade.mode", "BLINDNESS")!!.uppercase())
+        }.getOrDefault(FadeMode.BLINDNESS)
+
+        val glyph = cfg.getString("cutscene.playback.fade.title-glyph", "").orEmpty()
+        if (mode == FadeMode.TITLE && glyph.isBlank()) {
+            plugin.logger.warning("cutscene.playback.fade.mode=TITLE needs a title-glyph; using BLINDNESS")
+        }
+
+        return FadeSettings(
+            mode = mode,
+            outTicks = cfg.getInt("cutscene.playback.fade.out-ticks", 10),
+            holdTicks = cfg.getInt("cutscene.playback.fade.hold-ticks", 10),
+            inTicks = cfg.getInt("cutscene.playback.fade.in-ticks", 20),
+            titleGlyph = glyph
         )
     }
 

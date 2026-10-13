@@ -384,11 +384,11 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 if (!player.isOnline || playerSessions[playerId] !is PlayerSession.Playback) {
                     return@Runnable
                 }
-                player.teleport(path[0])
                 val controller = AsyncPacketPlaybackController(
                     plugin,
                     settings.updateRate,
-                    settings.rideHeightOffset,
+                    settings.eyeHeight,
+                    settings.fade,
                     onComplete,
                     onCancel,
                     cutscene.events,

@@ -27,10 +27,23 @@ cutscene:
     # PacketEvents is required
     update-rate: 60
 
-    # Vertical offset added to the path so that the sitting (ridden) player's eye
-    # height matches the standing height that was recorded. Increase if the camera
-    # appears too low, decrease if too high (typical fine-tune range: 0.0–1.5).
-    ride-height-offset: 0.75
+    # Camera height above the recorded feet position. 1.62 matches a standing
+    # player's eyes. The camera is a client-side entity, the viewer cannot move
+    # or look around and sees no hotbar or hand.
+    eye-height: 1.62
+
+    # Fade to black before the camera cuts in and before it cuts back.
+    fade:
+      # NONE      - hard cut.
+      # BLINDNESS - works without a resource pack (blindness fog, eases out).
+      # TITLE     - shows `title-glyph` as a title. Use a full-screen black glyph
+      #             from your resource pack for a true smooth fade.
+      mode: BLINDNESS
+      out-ticks: 10   # fade to black
+      hold-ticks: 10  # stay black while the camera switches
+      in-ticks: 20    # fade back in
+      # MiniMessage text, e.g. "<font:mypack:fade>\uE000</font>"
+      title-glyph: ""
 
     # CATMULL_ROM - smooth spline through all keyframes.
     # BEZIER - cubic Bezier with auto control points.

@@ -1,27 +1,25 @@
 package com.nonxedy.playback
 
-import com.github.retrooper.packetevents.PacketEvents
-import com.github.retrooper.packetevents.util.Vector3d
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerRotation
+import com.nonxedy.model.playback.FadeSettings
 import com.nonxedy.model.timeline.TimelineEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.Location
-import org.bukkit.entity.ArmorStand
+import org.bukkit.World
 import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.plugin.java.JavaPlugin
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 // Packet-based cutscene playback
 class AsyncPacketPlaybackController(
     private val plugin: JavaPlugin,
     private val updateRate: Int,
-    private val rideHeightOffset: Double,
+    private val eyeHeight: Double,
+    private val fade: FadeSettings,
     private val onComplete: () -> Unit,
     private val onCancel: () -> Unit,
     private val timelineEvents: List<TimelineEvent> = emptyList(),
@@ -30,15 +28,19 @@ class AsyncPacketPlaybackController(
 
     private val active = AtomicBoolean(false)
     private val cleanedUp = AtomicBoolean(false)
+    private val fadingOut = AtomicBoolean(false)
     private var executor: ScheduledExecutorService? = null
-    private var carrier: ArmorStand? = null
+    @Volatile private var rig: CameraRig? = null
     private var originalLocation: Location? = null
 
     private var playerRef: Player? = null
+    private var entered = false
     private var wasFlying = false
     private var wasAllowedFlight = false
-    private val lastFollowChunkX = AtomicInteger(Int.MIN_VALUE)
-    private val lastFollowChunkZ = AtomicInteger(Int.MIN_VALUE)
+
+    @Volatile private var anchorWorld: World? = null
+    @Volatile private var anchorChunkX = Int.MIN_VALUE
+    @Volatile private var anchorChunkZ = Int.MIN_VALUE
 
     override fun start(player: Player, path: List<Location>, totalDurationMs: Long) {
         if (path.isEmpty()) {
@@ -53,29 +55,32 @@ class AsyncPacketPlaybackController(
 
         val pathArray = path.toTypedArray()
 
-        Bukkit.getScheduler().runTask(plugin, Runnable {
+        // darken first, then cut to the camera once the screen is black
+        ScreenFade.cover(player, fade)
+        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
             if (!active.get() || !player.isOnline) {
                 cleanup(player)
                 return@Runnable
             }
 
-            wasFlying = player.isFlying
-            wasAllowedFlight = player.allowFlight
-            player.hidePlayer(player)
-            player.setAllowFlight(true)
-            player.setFlying(true)
-
-            val stand = spawnCarrier(player, pathArray[0])
-            carrier = stand
-            stand.addPassenger(player)
-
-            if (!active.get() || !player.isOnline) {
-                cleanup(player)
-                return@Runnable
-            }
-
+            enterCamera(player, pathArray[0])
             beginPacketLoop(player, pathArray, totalDurationMs)
-        })
+        }, if (fade.enabled) fade.outTicks.toLong() else 0L)
+    }
+
+    private fun enterCamera(player: Player, first: Location) {
+        entered = true
+        wasFlying = player.isFlying
+        wasAllowedFlight = player.allowFlight
+        player.leaveVehicle()
+        player.setAllowFlight(true)
+        player.setFlying(true)
+        for (other in Bukkit.getOnlinePlayers()) {
+            if (other != player) other.hidePlayer(plugin, player)
+        }
+
+        moveAnchor(player, first)
+        rig = CameraRig(player, eyeHeight).also { it.attach(first) }
     }
 
     private fun beginPacketLoop(player: Player, pathArray: Array<Location>, totalDurationMs: Long) {
@@ -85,6 +90,7 @@ class AsyncPacketPlaybackController(
         val intervalNs = 1_000_000_000L / updateRate
         val startTime = System.currentTimeMillis()
         val timeline = TimelineClock(plugin, player, cutsceneName, timelineEvents)
+        val fadeOutAt = totalDurationMs - fade.outMs
 
         executor = Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "nonscenes-async-playback-${player.uniqueId.toString().take(8)}")
@@ -102,6 +108,11 @@ class AsyncPacketPlaybackController(
 
                 val elapsed = System.currentTimeMillis() - startTime
                 timeline.pulse(elapsed)
+                if (fade.enabled && elapsed >= fadeOutAt && fadingOut.compareAndSet(false, true)) {
+                    Bukkit.getScheduler().runTask(plugin, Runnable {
+                        if (active.get() && player.isOnline) ScreenFade.cover(player, fade)
+                    })
+                }
                 if (elapsed >= totalDurationMs) {
                     active.set(false)
                     shutdown()
@@ -114,8 +125,8 @@ class AsyncPacketPlaybackController(
 
                 val progress = elapsed.toDouble() / totalDurationMs.toDouble()
                 val loc = samplePath(pathArray, lastIndex, progress)
-                sendCameraPackets(player, loc)
-                followChunkIfNeeded(player, loc)
+                rig?.move(loc)
+                followAnchorIfNeeded(player, loc)
 
                 val index = (progress * lastIndex).toInt().coerceIn(0, lastIndex)
                 if (index % (updateRate / 4).coerceAtLeast(1) == 0) {
@@ -133,15 +144,17 @@ class AsyncPacketPlaybackController(
     override fun stop() {
         active.set(false)
         shutdown()
-        val p = playerRef
-        if (p != null) {
+        val p = playerRef ?: return
+        // On plugin disable the scheduler no longer runs tasks, so clean up inline.
+        if (Bukkit.isPrimaryThread()) {
+            cleanup(p)
+        } else {
             Bukkit.getScheduler().runTask(plugin, Runnable { cleanup(p) })
         }
     }
 
     override fun isActive(): Boolean = active.get()
 
-    
     // Interpolates between the two neighbouring path points using the fractional
     // progress `t` (in 0..1). `lastIndex` is the index of the final path point
     private fun samplePath(path: Array<Location>, lastIndex: Int, t: Double): Location {
@@ -170,86 +183,28 @@ class AsyncPacketPlaybackController(
         return (from + delta * t).toFloat()
     }
 
-    private fun sendCameraPackets(player: Player, loc: Location) {
-        if (!PacketEvents.getAPI().isInitialized) return
-        try {
-            val stand = carrier
-            if (stand != null && !stand.isDead) {
-                PacketEvents.getAPI().playerManager.sendPacket(
-                    player,
-                    WrapperPlayServerEntityTeleport(
-                        stand.entityId,
-                        Vector3d(loc.x, loc.y + rideHeightOffset, loc.z),
-                        loc.yaw,
-                        loc.pitch,
-                        true
-                    )
-                )
-            }
-            PacketEvents.getAPI().playerManager.sendPacket(
-                player,
-                WrapperPlayServerPlayerRotation(loc.yaw, loc.pitch)
-            )
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun followChunkIfNeeded(player: Player, loc: Location) {
+    private fun followAnchorIfNeeded(player: Player, loc: Location) {
         val cx = loc.blockX shr 4
         val cz = loc.blockZ shr 4
-        if (cx == lastFollowChunkX.get() && cz == lastFollowChunkZ.get()) return
-        lastFollowChunkX.set(cx)
-        lastFollowChunkZ.set(cz)
+        if (loc.world == anchorWorld && cx == anchorChunkX && cz == anchorChunkZ) return
+        anchorWorld = loc.world
+        anchorChunkX = cx
+        anchorChunkZ = cz
         Bukkit.getScheduler().runTask(plugin, Runnable {
             if (!active.get() || !player.isOnline) return@Runnable
-            keepCameraChunkLoaded(player, loc)
+            val changedWorld = player.world != loc.world
+            moveAnchor(player, loc)
+            // a world change respawns the client, which drops the camera entity
+            // and resets the local game mode
+            if (changedWorld) rig?.attach(loc)
         })
     }
 
-    private fun keepCameraChunkLoaded(player: Player, loc: Location) {
-        val world = loc.world ?: return
-        val cx = loc.blockX shr 4
-        val cz = loc.blockZ shr 4
-        for (dx in -1..1) {
-            for (dz in -1..1) {
-                val x = cx + dx
-                val z = cz + dz
-                if (!world.isChunkLoaded(x, z)) {
-                    try {
-                        world.getChunkAtAsync(x, z)
-                    } catch (_: NoSuchMethodError) {
-                        world.loadChunk(x, z, true)
-                    }
-                }
-            }
-        }
-        if (!world.isChunkLoaded(cx, cz)) {
-            world.loadChunk(cx, cz, true)
-        }
-
-        val carrierLoc = loc.clone().add(0.0, rideHeightOffset, 0.0)
-        val stand = carrier
-        if (stand == null || stand.isDead) {
-            val spawned = spawnCarrier(player, loc)
-            carrier = spawned
-            spawned.addPassenger(player)
-        } else {
-            stand.teleport(carrierLoc)
-        }
-    }
-
-    private fun spawnCarrier(player: Player, at: Location): ArmorStand {
-        return player.world.spawn(at.clone().add(0.0, rideHeightOffset, 0.0), ArmorStand::class.java) { stand ->
-            stand.isVisible = false
-            stand.setGravity(false)
-            stand.isInvulnerable = true
-            stand.isSilent = true
-            stand.setBasePlate(false)
-            stand.isSmall = true
-            stand.isMarker = true
-            stand.customName = null
-            stand.setCollidable(false)
-        }
+    private fun moveAnchor(player: Player, loc: Location) {
+        anchorWorld = loc.world
+        anchorChunkX = loc.blockX shr 4
+        anchorChunkZ = loc.blockZ shr 4
+        player.teleport(loc, PlayerTeleportEvent.TeleportCause.PLUGIN)
     }
 
     private fun cleanup(player: Player) {
@@ -257,27 +212,27 @@ class AsyncPacketPlaybackController(
         if (!cleanedUp.compareAndSet(false, true)) return
         playerRef = null
 
-        val stand = carrier
-        carrier = null
-        if (stand != null && !stand.isDead) {
-            stand.removePassenger(player)
-            stand.remove()
-        }
+        val camera = rig
+        rig = null
 
-        if (!player.isOnline) {
+        if (!player.isOnline || !entered) {
             originalLocation = null
             return
         }
 
-        player.showPlayer(player)
+        camera?.detach()
+        for (other in Bukkit.getOnlinePlayers()) {
+            if (other != player) other.showPlayer(plugin, player)
+        }
         player.setFlying(wasFlying)
         player.setAllowFlight(wasAllowedFlight)
 
         // Bring the player back to where they started the cutscene.
         originalLocation?.let { loc ->
-            player.teleport(loc)
+            player.teleport(loc, PlayerTeleportEvent.TeleportCause.PLUGIN)
         }
         originalLocation = null
+        player.updateInventory()
     }
 
     private fun shutdown() {

@@ -14,6 +14,7 @@ class PlaybackSettingsTest {
         assertTrue(settings.smoothRotation)
         assertTrue(settings.bakePath)
         assertEquals(16L, settings.updateIntervalMs)
+        assertEquals(1.62, settings.eyeHeight)
     }
 
     @Test

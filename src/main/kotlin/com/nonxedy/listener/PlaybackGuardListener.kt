@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
@@ -25,6 +26,13 @@ import org.bukkit.event.vehicle.VehicleExitEvent
 class PlaybackGuardListener(private val plugin: Nonscenes) : Listener {
 
     private fun watching(player: Player): Boolean = plugin.cutsceneManager.isWatchingCutscene(player)
+
+    // players watching a cutscene are hidden from everyone else
+    fun onJoin(event: PlayerJoinEvent) {
+        for (other in plugin.server.onlinePlayers) {
+            if (other != event.player && watching(other)) event.player.hidePlayer(plugin, other)
+        }
+    }
 
     @EventHandler(priority = EventPriority.HIGH)
     fun onMove(event: PlayerMoveEvent) {
