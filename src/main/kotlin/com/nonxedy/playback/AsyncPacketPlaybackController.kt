@@ -2,6 +2,7 @@ package com.nonxedy.playback
 
 import com.nonxedy.model.playback.FadeSettings
 import com.nonxedy.model.timeline.TimelineEvent
+import com.nonxedy.util.ColorUtil
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -14,6 +15,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.logging.Level
 
 // Packet-based cutscene playback
 class AsyncPacketPlaybackController(
@@ -68,8 +70,12 @@ class AsyncPacketPlaybackController(
                 return@Runnable
             }
 
-            enterCamera(player, pathArray[0])
-            beginPacketLoop(player, pathArray, totalDurationMs)
+            try {
+                enterCamera(player, pathArray[0])
+                beginPacketLoop(player, pathArray, totalDurationMs)
+            } catch (e: Throwable) {
+                abort(player, "start", e)
+            }
         }, if (fade.enabled) fade.outTicks.toLong() else 0L)
     }
 
@@ -101,50 +107,82 @@ class AsyncPacketPlaybackController(
         val fadeOutAt = totalDurationMs - fade.outMs
 
         loop = executor.scheduleWithFixedDelay({
-            if (!active.get() || !player.isOnline) {
-                active.set(false)
+            try {
+                tick(player, pathArray, lastIndex, startNs, timeline, fadeOutAt, totalDurationMs)
+            } catch (e: Throwable) {
+                Bukkit.getScheduler().runTask(plugin, Runnable { abort(player, "loop", e) })
                 shutdown()
-                Bukkit.getScheduler().runTask(plugin, Runnable {
-                    cleanup(player)
-                    onCancel()
-                })
-                return@scheduleWithFixedDelay
-            }
-
-            val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-            timeline.pulse(elapsed)
-            if (fade.enabled && elapsed >= fadeOutAt && fadingOut.compareAndSet(false, true)) {
-                Bukkit.getScheduler().runTask(plugin, Runnable {
-                    if (active.get() && player.isOnline) ScreenFade.cover(player, fade)
-                })
-            }
-            if (elapsed >= totalDurationMs) {
-                active.set(false)
-                shutdown()
-                Bukkit.getScheduler().runTask(plugin, Runnable {
-                    cleanup(player)
-                    onComplete()
-                })
-                return@scheduleWithFixedDelay
-            }
-
-            val progress = elapsed.toDouble() / totalDurationMs.toDouble()
-            val loc = samplePath(pathArray, lastIndex, progress)
-            rig?.move(loc)
-            followAnchorIfNeeded(player, loc)
-
-            val now = System.nanoTime()
-            val last = lastActionBarNs.get()
-            if (now - last >= ACTION_BAR_INTERVAL_NS && lastActionBarNs.compareAndSet(last, now)) {
-                val index = (progress * lastIndex).toInt().coerceIn(0, lastIndex)
-                val text = " ${index + 1} / ${pathArray.size}"
-                Bukkit.getScheduler().runTask(plugin, Runnable {
-                    if (player.isOnline) {
-                        player.sendActionBar(MINI_MESSAGE.deserialize(text))
-                    }
-                })
             }
         }, 0L, intervalNs, TimeUnit.NANOSECONDS)
+    }
+
+    private fun tick(
+        player: Player,
+        pathArray: Array<Location>,
+        lastIndex: Int,
+        startNs: Long,
+        timeline: TimelineClock,
+        fadeOutAt: Long,
+        totalDurationMs: Long
+    ) {
+        if (!active.get() || !player.isOnline) {
+            active.set(false)
+            shutdown()
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                cleanup(player)
+                onCancel()
+            })
+            return
+        }
+
+        val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+        timeline.pulse(elapsed)
+        if (fade.enabled && elapsed >= fadeOutAt && fadingOut.compareAndSet(false, true)) {
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                if (active.get() && player.isOnline) ScreenFade.cover(player, fade)
+            })
+        }
+        if (elapsed >= totalDurationMs) {
+            active.set(false)
+            shutdown()
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                cleanup(player)
+                onComplete()
+            })
+            return
+        }
+
+        val progress = elapsed.toDouble() / totalDurationMs.toDouble()
+        val loc = samplePath(pathArray, lastIndex, progress)
+        rig?.move(loc)
+        followAnchorIfNeeded(player, loc)
+
+        val now = System.nanoTime()
+        val last = lastActionBarNs.get()
+        if (now - last >= ACTION_BAR_INTERVAL_NS && lastActionBarNs.compareAndSet(last, now)) {
+            val index = (progress * lastIndex).toInt().coerceIn(0, lastIndex)
+            val text = " ${index + 1} / ${pathArray.size}"
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                if (player.isOnline) {
+                    player.sendActionBar(MINI_MESSAGE.deserialize(text))
+                }
+            })
+        }
+    }
+
+    // playback failed
+    private fun abort(player: Player, stage: String, error: Throwable) {
+        plugin.logger.log(Level.SEVERE, "Cutscene '$cutsceneName' failed during $stage for ${player.name}", error)
+        if (!active.getAndSet(false)) return
+        shutdown()
+        try {
+            cleanup(player)
+        } finally {
+            onCancel()
+        }
+        if (player.isOnline) {
+            player.sendMessage(ColorUtil.format("&cThe cutscene could not be played. See the server log."))
+        }
     }
 
     override fun stop() {

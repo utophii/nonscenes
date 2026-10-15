@@ -13,12 +13,12 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -32,7 +32,7 @@ class CameraRig(
     private val logger: Logger
 ) {
 
-    private val entityId = Bukkit.getUnsafe().nextEntityId()
+    private val entityId = nextClientEntityId()
     private val uuid = UUID.randomUUID()
     private val failureLogged = AtomicBoolean(false)
 
@@ -106,6 +106,12 @@ class CameraRig(
     }
 
     private companion object {
+        // the camera exists only on the client. Its ids count down from the top of the
+        // range while the server's count up from 1
+        private val clientEntityIds = AtomicInteger(Int.MAX_VALUE)
+
+        fun nextClientEntityId(): Int = clientEntityIds.getAndDecrement()
+
         const val SPECTATOR = 3f
         const val FLAG_INVISIBLE: Byte = 0x20
         const val ARMOR_STAND_MARKER: Byte = 0x10
