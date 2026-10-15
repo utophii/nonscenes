@@ -45,16 +45,14 @@ cutscene:
       # MiniMessage text, e.g. "<font:mypack:fade>\uE000</font>"
       title-glyph: ""
 
-    # CATMULL_ROM - smooth spline through all keyframes.
-    # BEZIER - cubic Bezier with auto control points.
+    # Both are timed splines through every keyframe: the camera passes each
+    # keyframe at its own time and never stops at one.
+    # CATMULL_ROM - round, flowing curves.
+    # BEZIER      - tighter curves that never swing past a keyframe.
     interpolation: CATMULL_ROM
 
     # Smooth rotation transitions (yaw/pitch wrapping handled automatically)
     smooth-rotation: true
-
-    # Pre-compute the whole trajectory before starting playback.
-    # Eliminates runtime interpolation cost and guarantees consistent timing.
-    bake-path: true
 
   creation:
     progress-bar:
@@ -66,6 +64,18 @@ cutscene:
     # How many server ticks pass between captured frames.
     # 1 = 20 FPS, 2 = 10 FPS, etc.
     capture-interval-ticks: 1
+
+  editor:
+    # When a raw recording is opened in the editor it is reduced to keyframes.
+    # A frame is dropped when the path between the keyframes around it, at the
+    # same moment in time, stays within these limits of it. Smaller values keep
+    # more keyframes. `/nonscene edit <name> <blocks>` overrides the position one.
+    simplify:
+      position-tolerance: 0.25   # blocks
+      angle-tolerance: 3.0       # degrees of yaw / pitch
+    # Duration of a new segment when there is no neighbouring segment to copy
+    # the speed from.
+    default-segment-seconds: 2.0
 
 # ---------------------------------------------------------------------------
 # Triggers

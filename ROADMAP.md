@@ -19,7 +19,7 @@
 - [ ] Relocate shaded libraries (SQLite, Hikari, JDBC drivers) or stop bundling unused DB drivers
 - [ ] Drop unused shaded deps already provided by Paper (SnakeYAML, Adventure, Commons Lang)
 - [ ] Return original cutscene names from `getCutsceneNames()` (not lowercase map keys)
-- [ ] Fix mixed-up cancel messages and add the missing `error-occurred` key
+- [ ] Fix mixed-up cancel messages (`error-occurred` key added)
 - [ ] Use or remove `smooth-rotation` and other unused config options
 - [x] Delete empty `PlayerStateRestorer.onPlayerJoin` or actually restore location after a crash
 - [ ] Use `plugin.logger` instead of a raw `Logger.getLogger("nonscenes")`
@@ -42,7 +42,7 @@
 - [x] Timeline events: title, sound, particles, console/player commands
 - [x] Triggers: first join, region, custom command
 - [x] Fade in/out and a proper camera lock (not only an armor stand)
-- [ ] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
+- [x] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
 - [ ] Pause, skip, rename, copy, export/import a single cutscene file
 - [ ] `/nonscene reload`
 - [ ] Confirm before delete

@@ -1,12 +1,16 @@
 package com.nonxedy.core
 
+import com.nonxedy.interpolator.PathInterpolator
 import com.nonxedy.model.Cutscene
+import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.model.timeline.TimelineEvent
+import org.bukkit.Location
 import org.bukkit.entity.Player
 
 interface CutsceneManagerInterface {
     fun startRecording(player: Player, name: String, seconds: Int)
     fun playCutscene(player: Player, name: String): Boolean
+    fun previewCutscene(player: Player, cutscene: Cutscene): Boolean
     fun deleteCutscene(player: Player, name: String)
     fun listAllCutscenes(player: Player)
     fun showCutscenePath(player: Player, name: String)
@@ -24,6 +28,10 @@ interface CutsceneManagerInterface {
     fun getCutscene(name: String): Cutscene?
     fun addTimelineEvent(name: String, event: TimelineEvent): Boolean
     fun clearTimelineEvents(name: String): Boolean
+    fun saveEditedCutscene(cutscene: Cutscene)
+
+    fun createInterpolator(type: InterpolationType): PathInterpolator
+    fun sampleCurve(cutscene: Cutscene, stepMs: Long = 50L): List<Location>
 
     fun cleanup()
 }

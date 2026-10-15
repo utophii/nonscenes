@@ -17,7 +17,7 @@ commands:
   nonscene:
     description: Main command for cutscene management
     aliases: [ns]
-    usage: /nonscene <start|delete|all|play|showpath|stop> [name] [seconds|player]
+    usage: /nonscene <start|delete|all|play|showpath|stop|event|edit|key|preview|save|discard> [args]
     permission: nonscene.use
 
 permissions:
@@ -48,6 +48,9 @@ permissions:
   nonscene.event:
     description: Allows editing cutscene timeline events
     default: op
+  nonscene.edit:
+    description: Allows editing cutscene keyframes
+    default: op
   nonscene.admin:
     description: Grants all nonscene permissions
     default: op
@@ -61,3 +64,4 @@ permissions:
       nonscene.showpath: true
       nonscene.stop: true
       nonscene.event: true
+      nonscene.edit: true

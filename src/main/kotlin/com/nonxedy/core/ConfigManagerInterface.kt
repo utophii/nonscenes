@@ -1,5 +1,6 @@
 package com.nonxedy.core
 
+import com.nonxedy.model.editor.EditorSettings
 import com.nonxedy.model.playback.PlaybackSettings
 import com.nonxedy.model.recording.RecordingSettings
 import net.kyori.adventure.text.Component
@@ -21,4 +22,5 @@ interface ConfigManagerInterface {
 
     fun getPlaybackSettings(): PlaybackSettings
     fun getRecordingSettings(): RecordingSettings
+    fun getEditorSettings(): EditorSettings
 }

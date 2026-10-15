@@ -40,6 +40,7 @@ class MySQLCutsceneDatabaseService(
             z DOUBLE NOT NULL,
             yaw FLOAT NOT NULL,
             pitch FLOAT NOT NULL,
+            segment_ms BIGINT,
             PRIMARY KEY (cutscene_name, frame_index),
             FOREIGN KEY (cutscene_name) REFERENCES cutscenes(name) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4

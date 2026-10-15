@@ -13,6 +13,7 @@ import com.nonxedy.interpolator.PathInterpolator
 import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
 import com.nonxedy.model.timeline.TimelineEvent
+import com.nonxedy.model.timeline.TimelineEventType
 import com.nonxedy.model.timeline.TimelineEvents
 import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.playback.AsyncPacketPlaybackController
@@ -175,7 +176,8 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                             sec.getDouble("yaw").toFloat(),
                             sec.getDouble("pitch").toFloat()
                         )
-                        frames.add(CutsceneFrame(loc, worldName))
+                        val segmentMs = sec.getLong("segment-ms", -1L).takeIf { it > 0L }
+                        frames.add(CutsceneFrame(loc, worldName, segmentMs))
                     }
                 }
                 if (frames.isNotEmpty()) {
@@ -223,6 +225,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             config.set("frames.$i.z", f.location.z)
             config.set("frames.$i.yaw", f.location.yaw)
             config.set("frames.$i.pitch", f.location.pitch)
+            f.segmentMs?.let { config.set("frames.$i.segment-ms", it) }
         }
         TimelineEvents.writeYaml(config, cutscene.events)
         config.save(file)
@@ -324,42 +327,55 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
 
     // Playback
     override fun playCutscene(player: Player, name: String): Boolean {
-        val playerId = player.uniqueId
-        if (playerSessions.containsKey(playerId)) {
-            player.sendMessage(plugin.configManager.getMessage("already-playing") ?: "")
-            return false
-        }
         val cutscene = cutscenes[name.lowercase()]
         if (cutscene == null || cutscene.frames.isEmpty()) {
             player.sendMessage(plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cNot found")
             return false
         }
+        return startPlayback(player, cutscene, name)
+    }
 
-        val resolvedFrames = resolveFrameLocations(cutscene.frames)
-        if (resolvedFrames == null) {
-            val worldName = findFirstMissingWorldName(cutscene.frames) ?: "unknown"
-            player.sendMessage("§cUnable to play cutscene '$name': world '$worldName' is not loaded.")
+    // plays an unsaved cutscene. Command events are skipped so a preview never
+    // runs console or player commands
+    override fun previewCutscene(player: Player, cutscene: Cutscene): Boolean {
+        val safeEvents = cutscene.events.filter {
+            it.type != TimelineEventType.CONSOLE && it.type != TimelineEventType.PLAYER
+        }
+        return startPlayback(player, cutscene.copy(events = safeEvents), cutscene.name)
+    }
+
+    private fun startPlayback(player: Player, cutscene: Cutscene, name: String): Boolean {
+        val playerId = player.uniqueId
+        if (playerSessions.containsKey(playerId)) {
+            player.sendMessage(plugin.configManager.getMessage("already-playing") ?: "")
+            return false
+        }
+        if (cutscene.frames.size < 2) {
+            player.sendMessage("§cCutscene '$name' needs at least two frames.")
+            return false
+        }
+
+        val missingWorld = findFirstMissingWorldName(cutscene.frames)
+        if (missingWorld != null) {
+            player.sendMessage("§cUnable to play cutscene '$name': world '$missingWorld' is not loaded.")
             return false
         }
 
         val settings = plugin.configManager.getPlaybackSettings()
-        val interpolator = createInterpolator(settings.interpolation)
-
-        val path = if (settings.bakePath) {
-            try {
-                PathBaker.bake(cutscene.copy(frames = resolvedFrames.map { CutsceneFrame(it) }), settings, interpolator)
-            } catch (e: Exception) {
-                plugin.logger.warning("Failed to bake path for '$name', falling back to raw frames: ${e.message}")
-                resolvedFrames
-            }
-        } else resolvedFrames
+        val path = try {
+            PathBaker.bake(cutscene, settings, createInterpolator(settings.interpolation))
+        } catch (e: Exception) {
+            plugin.logger.log(Level.WARNING, "Failed to bake path for '$name'", e)
+            player.sendMessage(plugin.configManager.getMessage("error-occurred") ?: "§cFailed to play cutscene.")
+            return false
+        }
 
         if (path.isEmpty()) {
             player.sendMessage("§cCutscene '$name' produced an empty path.")
             return false
         }
 
-        val totalDurationMs = cutscene.frameDurationMs * (cutscene.frames.size - 1)
+        val totalDurationMs = cutscene.totalDurationMs
         playerSessions[playerId] = PlayerSession.Playback(playerId, name, 0, path.size)
         player.sendMessage(plugin.configManager.getMessage("cutscene-playing")?.replace("{name}", name) ?: "§aPlaying...")
         player.updateCommands()
@@ -412,7 +428,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         return true
     }
 
-    private fun createInterpolator(type: InterpolationType): PathInterpolator = when (type) {
+    override fun createInterpolator(type: InterpolationType): PathInterpolator = when (type) {
         InterpolationType.CATMULL_ROM -> CatmullRomPathInterpolator()
         InterpolationType.BEZIER -> BezierPathInterpolator()
     }
@@ -491,6 +507,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             playerSessions.remove(playerId)
             return
         }
+        val curve = sampleCurve(cutscene)
 
         val task = object : BukkitRunnable() {
             var elapsedTicks = 0
@@ -500,11 +517,12 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 if (elapsedTicks >= totalTicks) {
                     cancel(); playerSessions.remove(playerId); sessionTasks.remove(playerId); return
                 }
-                for (i in 0 until resolvedFrames.size - 1) {
-                    val start = resolvedFrames[i]
-                    val end = resolvedFrames[i + 1]
+                for (i in 0 until curve.size - 1) {
+                    val start = curve[i]
+                    val end = curve[i + 1]
                     if (start.world != end.world) continue
                     val distance = start.distance(end)
+                    if (distance <= 0.0) continue
                     val direction = end.toVector().subtract(start.toVector()).normalize()
                     var d = 0.0
                     while (d < distance) {
@@ -520,6 +538,19 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             }
         }.runTaskTimer(plugin, 0L, 5L)
         sessionTasks[playerId] = task
+    }
+
+    // the spline the camera follows, sampled densely enough to draw
+    override fun sampleCurve(cutscene: Cutscene, stepMs: Long): List<Location> {
+        if (cutscene.frames.isEmpty()) return emptyList()
+        val curve = createInterpolator(plugin.configManager.getPlaybackSettings().interpolation).curve(cutscene)
+        val total = cutscene.totalDurationMs
+        val steps = (total / stepMs.coerceAtLeast(1L)).toInt().coerceIn(1, MAX_CURVE_SAMPLES)
+        return (0..steps).mapNotNull { i ->
+            val point = curve.sample(total * i.toDouble() / steps)
+            val world = Bukkit.getWorld(point.worldName) ?: return@mapNotNull null
+            Location(world, point.x, point.y, point.z, point.yaw, point.pitch)
+        }
     }
 
     // Deletion / Listing
@@ -623,6 +654,18 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun getCutsceneNames(): List<String> = cutscenes.keys.toList()
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
 
+    override fun saveEditedCutscene(cutscene: Cutscene) {
+        val key = cutscene.name.lowercase()
+        val previous = cutscenes[key]
+        cutscenes[key] = cutscene
+        try {
+            saveCutscene(cutscene)
+        } catch (e: Exception) {
+            if (previous != null) cutscenes[key] = previous else cutscenes.remove(key)
+            throw e
+        }
+    }
+
     override fun addTimelineEvent(name: String, event: TimelineEvent): Boolean {
         val key = name.lowercase()
         val cutscene = cutscenes[key] ?: return false
@@ -654,6 +697,10 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             throw IOException("Cutscene path escaped storage directory: $name")
         }
         return file
+    }
+
+    private companion object {
+        const val MAX_CURVE_SAMPLES = 4000
     }
 
     private fun resolveFrameLocations(frames: List<CutsceneFrame>): List<Location>? {

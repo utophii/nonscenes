@@ -1,6 +1,7 @@
 package com.nonxedy.core
 
 import com.nonxedy.Nonscenes
+import com.nonxedy.model.editor.EditorSettings
 import com.nonxedy.model.playback.FadeMode
 import com.nonxedy.model.playback.FadeSettings
 import com.nonxedy.model.playback.InterpolationType
@@ -174,7 +175,6 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
             updateRate = cfg.getInt("cutscene.playback.update-rate", 60).coerceIn(20, 240),
             interpolation = interpolation,
             smoothRotation = cfg.getBoolean("cutscene.playback.smooth-rotation", true),
-            bakePath = cfg.getBoolean("cutscene.playback.bake-path", true),
             eyeHeight = cfg.getDouble("cutscene.playback.eye-height", 1.62),
             fade = getFadeSettings(cfg)
         )
@@ -214,6 +214,16 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
             barStyle = style,
             barColor = color,
             captureIntervalTicks = cfg.getInt("cutscene.recording.capture-interval-ticks", 1).coerceAtLeast(1)
+        )
+    }
+
+    override fun getEditorSettings(): EditorSettings {
+        val cfg = config ?: return EditorSettings()
+        val defaultSeconds = cfg.getDouble("cutscene.editor.default-segment-seconds", 2.0)
+        return EditorSettings(
+            positionTolerance = cfg.getDouble("cutscene.editor.simplify.position-tolerance", 0.25).coerceAtLeast(0.01),
+            angleTolerance = cfg.getDouble("cutscene.editor.simplify.angle-tolerance", 3.0).coerceAtLeast(0.1),
+            defaultSegmentMs = (defaultSeconds * 1000).toLong().coerceAtLeast(50L)
         )
     }
 }

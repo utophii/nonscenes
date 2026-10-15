@@ -57,6 +57,27 @@ cd nonscenes
 - `/nonscene all` - List all cutscenes
 - `/nonscene delete <name>` - Delete a cutscene
 - `/nonscene showpath <name>` - Show cutscene path
+- `/nonscene edit <name> [tolerance]` - Edit a cutscene's keyframes (creates it if it doesn't exist)
+- `/nonscene key add [#]` / `move <#>` / `remove <#>` - Add, move or remove a keyframe at your position and view
+- `/nonscene key speed <#> <seconds>` - How long the camera takes from keyframe `#` to the next
+- `/nonscene key tp <#>` / `key list` - Go to a keyframe / list keyframes
+- `/nonscene preview` / `save` / `discard` - Watch, save or throw away the draft
+
+### Keyframe editor
+
+`/nonscene edit` opens a private draft. The camera path is drawn only for you: dots
+along the spline (spaced 0.1 s apart, so denser dots mean a slower camera), a flame
+and a view ray at every keyframe, and a numbered label showing its time and the
+duration of the next segment. Nothing is stored until `/nonscene save`.
+
+The camera follows a timed spline through the keyframes and never moves in straight
+lines between them. It passes keyframe `#` at exactly its time and does not stop
+there, so changing one segment's duration only changes how fast the camera moves
+along that part of the path.
+
+Opening a recorded cutscene reduces it to keyframes first. Every keyframe keeps its
+original time, so the cutscene's length stays the same. Tolerances are under
+`cutscene.editor` in `config.yml`.
 
 ## Permissions
 
@@ -66,6 +87,7 @@ cd nonscenes
 - `nonscene.delete` - Delete permission
 - `nonscene.list` - List permission
 - `nonscene.showpath` - Path visualization permission
+- `nonscene.edit` - Keyframe editor permission
 - `nonscene.admin` - All permissions
 
 ## Configuration

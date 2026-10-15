@@ -4,7 +4,6 @@ data class PlaybackSettings private constructor(
     val updateRate: Int,
     val interpolation: InterpolationType = InterpolationType.CATMULL_ROM,
     val smoothRotation: Boolean = true,
-    val bakePath: Boolean = true,
     val eyeHeight: Double = 1.62,
     val fade: FadeSettings = FadeSettings()
 ) {
@@ -19,7 +18,6 @@ data class PlaybackSettings private constructor(
             updateRate: Int = 60,
             interpolation: InterpolationType = InterpolationType.CATMULL_ROM,
             smoothRotation: Boolean = true,
-            bakePath: Boolean = true,
             eyeHeight: Double = 1.62,
             fade: FadeSettings = FadeSettings()
         ): PlaybackSettings {
@@ -27,7 +25,6 @@ data class PlaybackSettings private constructor(
                 updateRate = updateRate.coerceIn(MIN_UPDATE_RATE, MAX_UPDATE_RATE),
                 interpolation = interpolation,
                 smoothRotation = smoothRotation,
-                bakePath = bakePath,
                 eyeHeight = eyeHeight,
                 fade = fade
             )

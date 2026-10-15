@@ -73,6 +73,7 @@ class MongoDBCutsceneDatabaseService(
                     .append("z", location.z)
                     .append("yaw", location.yaw)
                     .append("pitch", location.pitch)
+                frame.segmentMs?.let { frameDoc.append("segmentMs", it) }
                 framesArray.add(frameDoc)
             }
 
@@ -116,7 +117,8 @@ class MongoDBCutsceneDatabaseService(
                         frameDoc.getDouble("yaw").toFloat(),
                         frameDoc.getDouble("pitch").toFloat()
                     )
-                    frames.add(CutsceneFrame(location, worldName))
+                    val segmentMs = (frameDoc.get("segmentMs") as? Number)?.toLong()
+                    frames.add(CutsceneFrame(location, worldName, segmentMs))
                 }
 
                 if (frames.isNotEmpty()) {

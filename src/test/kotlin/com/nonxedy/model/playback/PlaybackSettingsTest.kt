@@ -12,7 +12,6 @@ class PlaybackSettingsTest {
         assertEquals(60, settings.updateRate)
         assertEquals(InterpolationType.CATMULL_ROM, settings.interpolation)
         assertTrue(settings.smoothRotation)
-        assertTrue(settings.bakePath)
         assertEquals(16L, settings.updateIntervalMs)
         assertEquals(1.62, settings.eyeHeight)
     }

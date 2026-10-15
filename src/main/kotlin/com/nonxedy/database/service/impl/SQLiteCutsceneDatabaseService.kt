@@ -58,6 +58,7 @@ class SQLiteCutsceneDatabaseService(private val databaseFile: File) : AbstractSQ
             z REAL NOT NULL,
             yaw REAL NOT NULL,
             pitch REAL NOT NULL,
+            segment_ms INTEGER,
             PRIMARY KEY (cutscene_name, frame_index),
             FOREIGN KEY (cutscene_name) REFERENCES cutscenes(name) ON DELETE CASCADE
         )

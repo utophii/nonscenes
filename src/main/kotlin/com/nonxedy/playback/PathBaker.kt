@@ -9,12 +9,16 @@ import org.bukkit.World
 
 object PathBaker {
 
+    // samples the spline at evenly spaced times. The result is what the camera
+    // shows at 0, interval, 2 * interval, ... up to the cutscene's total duration
     fun bake(cutscene: Cutscene, settings: PlaybackSettings, interpolator: PathInterpolator): List<Location> {
-        val totalDurationMs = cutscene.frameDurationMs * (cutscene.frames.size - 1)
-        if (totalDurationMs <= 0 || cutscene.frames.isEmpty()) return emptyList()
+        if (cutscene.frames.isEmpty()) return emptyList()
+        val totalDurationMs = cutscene.totalDurationMs
+        if (totalDurationMs <= 0) return emptyList()
 
         val frameCount = ((totalDurationMs / settings.updateIntervalMs.toDouble()).toInt() + 1)
             .coerceAtLeast(2)
+        val curve = interpolator.curve(cutscene)
 
         val worlds = HashMap<String, World>()
         fun world(name: String): World {
@@ -24,8 +28,9 @@ object PathBaker {
         }
 
         return (0 until frameCount).map { i ->
-            val t = if (i == frameCount - 1) 1.0 else i.toDouble() / (frameCount - 1)
-            val point = interpolator.interpolate(cutscene.frames, t)
+            val time = if (i == frameCount - 1) totalDurationMs.toDouble()
+            else totalDurationMs * i.toDouble() / (frameCount - 1)
+            val point = curve.sample(time)
             Location(world(point.worldName), point.x, point.y, point.z, point.yaw, point.pitch)
         }
     }

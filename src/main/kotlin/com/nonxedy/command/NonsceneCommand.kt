@@ -27,6 +27,17 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         when (args[0].lowercase()) {
             "play" -> handlePlay(sender, args)
             "event" -> handleEvent(sender, args)
+            in EDITOR_COMMANDS -> {
+                if (sender !is Player) {
+                    sender.sendMessage(configManager.getMessage("player-only-command"))
+                    return true
+                }
+                if (!sender.hasPermission("nonscene.edit")) {
+                    sender.sendMessage(configManager.getMessage("no-permission"))
+                    return true
+                }
+                handleEditor(sender, args)
+            }
             "start", "delete", "all", "showpath", "stop" -> {
                 if (sender !is Player) {
                     sender.sendMessage(configManager.getMessage("player-only-command"))
@@ -190,6 +201,65 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         return TimelineEvent(timeMs, type, args)
     }
 
+    private fun handleEditor(player: Player, args: Array<String>) {
+        val editor = plugin.keyframeEditor
+        when (args[0].lowercase()) {
+            "edit" -> {
+                if (args.size < 2) {
+                    player.sendMessage(configManager.getMessage("invalid-edit-args"))
+                    return
+                }
+                val tolerance = args.getOrNull(2)?.let {
+                    it.toDoubleOrNull()?.takeIf { t -> t > 0.0 } ?: run {
+                        player.sendMessage(configManager.getMessage("invalid-edit-args"))
+                        return
+                    }
+                }
+                editor.open(player, args[1], tolerance)
+            }
+            "save" -> editor.save(player)
+            "discard" -> editor.discard(player)
+            "preview" -> editor.preview(player)
+            "key" -> handleKey(player, args)
+        }
+    }
+
+    private fun handleKey(player: Player, args: Array<String>) {
+        val editor = plugin.keyframeEditor
+        val action = args.getOrNull(1)?.lowercase()
+        val number = args.getOrNull(2)?.toIntOrNull()
+        when (action) {
+            "add" -> {
+                if (args.size >= 3 && number == null) {
+                    player.sendMessage(configManager.getMessage("invalid-key-args"))
+                    return
+                }
+                editor.add(player, number)
+            }
+            "list" -> editor.list(player)
+            "remove", "move", "tp" -> {
+                if (number == null) {
+                    player.sendMessage(configManager.getMessage("invalid-key-args"))
+                    return
+                }
+                when (action) {
+                    "remove" -> editor.remove(player, number)
+                    "move" -> editor.move(player, number)
+                    else -> editor.teleport(player, number)
+                }
+            }
+            "speed" -> {
+                val seconds = args.getOrNull(3)?.removeSuffix("s")?.toDoubleOrNull()
+                if (number == null || seconds == null) {
+                    player.sendMessage(configManager.getMessage("invalid-key-args"))
+                    return
+                }
+                editor.speed(player, number, seconds)
+            }
+            else -> player.sendMessage(configManager.getMessage("invalid-key-args"))
+        }
+    }
+
     private fun handlePlayerCommand(player: Player, args: Array<String>) {
         when (args[0].lowercase()) {
             "start" -> {
@@ -285,6 +355,12 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 if (sender.hasPermission("nonscene.list")) subCommands.add("all")
                 if (sender.hasPermission("nonscene.showpath")) subCommands.add("showpath")
                 if (sender.hasPermission("nonscene.stop")) subCommands.add("stop")
+                if (sender.hasPermission("nonscene.edit")) {
+                    subCommands.add("edit")
+                    if (plugin.keyframeEditor.isEditing(sender)) {
+                        subCommands.addAll(listOf("key", "preview", "save", "discard"))
+                    }
+                }
             }
             return filterCompletions(subCommands, args[0])
         }
@@ -299,6 +375,27 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 sender.hasPermission("nonscene.$subCommand")
             ) {
                 return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
+            }
+        }
+
+        if (sender is Player && sender.hasPermission("nonscene.edit")) {
+            val sub = args[0].lowercase()
+            if (sub == "edit" && args.size == 2) {
+                return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
+            }
+            if (sub == "key") {
+                if (args.size == 2) {
+                    return filterCompletions(listOf("add", "remove", "move", "speed", "tp", "list"), args[1])
+                }
+                if (args.size == 3 && args[1].lowercase() in KEY_INDEX_ACTIONS) {
+                    val count = plugin.keyframeEditor.keyframeCount(sender)
+                    val max = when (args[1].lowercase()) {
+                        "add" -> count + 1
+                        "speed" -> count - 1
+                        else -> count
+                    }
+                    return filterCompletions((1..max).map { it.toString() }, args[2])
+                }
             }
         }
 
@@ -321,5 +418,10 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         return options.filter { option ->
             option.lowercase().startsWith(input.lowercase())
         }.toMutableList()
+    }
+
+    private companion object {
+        val EDITOR_COMMANDS = setOf("edit", "key", "save", "discard", "preview")
+        val KEY_INDEX_ACTIONS = setOf("add", "remove", "move", "speed", "tp")
     }
 }

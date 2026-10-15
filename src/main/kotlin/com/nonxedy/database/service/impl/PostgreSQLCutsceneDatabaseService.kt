@@ -40,6 +40,7 @@ class PostgreSQLCutsceneDatabaseService(
             z DOUBLE PRECISION NOT NULL,
             yaw REAL NOT NULL,
             pitch REAL NOT NULL,
+            segment_ms BIGINT,
             PRIMARY KEY (cutscene_name, frame_index),
             FOREIGN KEY (cutscene_name) REFERENCES cutscenes(name) ON DELETE CASCADE
         )

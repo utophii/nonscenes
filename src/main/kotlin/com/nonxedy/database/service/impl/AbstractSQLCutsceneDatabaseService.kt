@@ -7,6 +7,7 @@ import org.bukkit.Location
 import java.sql.Connection
 import java.sql.DatabaseMetaData
 import java.sql.DriverManager
+import java.sql.Types
 import java.util.Properties
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -85,7 +86,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
             // Insert frames
             conn.prepareStatement(
-                "INSERT INTO cutscene_frames (cutscene_name, frame_index, world, x, y, z, yaw, pitch) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO cutscene_frames (cutscene_name, frame_index, world, x, y, z, yaw, pitch, segment_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ).use { stmt ->
                 cutscene.frames.forEachIndexed { index, frame ->
                     val location = frame.location
@@ -97,6 +98,8 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
                     stmt.setDouble(6, location.z)
                     stmt.setFloat(7, location.yaw)
                     stmt.setFloat(8, location.pitch)
+                    val segmentMs = frame.segmentMs
+                    if (segmentMs == null) stmt.setNull(9, Types.BIGINT) else stmt.setLong(9, segmentMs)
                     stmt.executeUpdate()
                 }
             }
@@ -118,7 +121,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         val cutscenes = mutableListOf<Cutscene>()
 
         conn.prepareStatement("""
-            SELECT c.name, c.ticks_per_frame, c.frame_duration_ms, c.events_text, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch
+            SELECT c.name, c.ticks_per_frame, c.frame_duration_ms, c.events_text, f.frame_index, f.world, f.x, f.y, f.z, f.yaw, f.pitch, f.segment_ms
             FROM cutscenes c
             JOIN cutscene_frames f ON c.name = f.cutscene_name
             ORDER BY c.name, f.frame_index
@@ -154,7 +157,8 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
                         rs.getFloat("yaw"),
                         rs.getFloat("pitch")
                     )
-                    currentFrames.add(CutsceneFrame(location, worldName))
+                    val segmentMs = rs.getLong("segment_ms").takeUnless { rs.wasNull() }
+                    currentFrames.add(CutsceneFrame(location, worldName, segmentMs))
                 }
 
                 // Add last cutscene
@@ -240,6 +244,12 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         if (!columnExists(metadata, "cutscenes", "events_text")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscenes ADD COLUMN events_text TEXT")
+            }
+        }
+
+        if (!columnExists(metadata, "cutscene_frames", "segment_ms")) {
+            conn.createStatement().use { stmt ->
+                stmt.execute("ALTER TABLE cutscene_frames ADD COLUMN segment_ms BIGINT")
             }
         }
     }
