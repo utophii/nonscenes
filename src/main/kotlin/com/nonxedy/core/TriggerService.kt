@@ -63,6 +63,18 @@ class TriggerService(private val plugin: Nonscenes) : Listener {
         }
     }
 
+    fun references(cutscene: String): List<String> {
+        val refs = mutableListOf<String>()
+        if (settings.firstJoinCutscene.equals(cutscene, ignoreCase = true)) refs.add("triggers.first-join")
+        settings.commands.forEach { (alias, target) ->
+            if (target.equals(cutscene, ignoreCase = true)) refs.add("triggers.commands.$alias")
+        }
+        settings.regions.forEach { region ->
+            if (region.cutscene.equals(cutscene, ignoreCase = true)) refs.add("triggers.regions.${region.id}")
+        }
+        return refs
+    }
+
     private fun playIfPossible(player: Player, cutscene: String): Boolean {
         if (!player.isOnline) return false
         if (plugin.cutsceneManager.hasActiveSession(player)) return false

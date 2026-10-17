@@ -14,7 +14,7 @@
 
 ### Cleanup
 
-- [ ] Stop dual-writing every cutscene to both the database and `cutscenes/*.yml`
+- [x] Stop dual-writing every cutscene to both the database and `cutscenes/*.yml`
 - [ ] Either wire HikariCP + pool / table-prefix / retry settings, or delete those unused config keys
 - [ ] Relocate shaded libraries (SQLite, Hikari, JDBC drivers) or stop bundling unused DB drivers
 - [ ] Drop unused shaded deps already provided by Paper (SnakeYAML, Adventure, Commons Lang)
@@ -43,7 +43,7 @@
 - [x] Triggers: first join, region, custom command
 - [x] Fade in/out and a proper camera lock (not only an armor stand)
 - [x] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
-- [ ] Pause, skip, rename, copy, export/import a single cutscene file
+- [x] Pause, skip, rename, copy, export/import a single cutscene file
 - [ ] `/nonscene reload`
 - [ ] Confirm before delete
 - [ ] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only

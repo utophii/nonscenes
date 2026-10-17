@@ -1,6 +1,7 @@
 package com.nonxedy.core
 
 import com.nonxedy.Nonscenes
+import com.nonxedy.database.CutsceneYaml
 import com.nonxedy.database.service.CutsceneDatabaseService
 import com.nonxedy.database.service.DatabaseType
 import com.nonxedy.database.service.impl.MongoDBCutsceneDatabaseService
@@ -14,7 +15,6 @@ import com.nonxedy.model.Cutscene
 import com.nonxedy.model.CutsceneFrame
 import com.nonxedy.model.timeline.TimelineEvent
 import com.nonxedy.model.timeline.TimelineEventType
-import com.nonxedy.model.timeline.TimelineEvents
 import com.nonxedy.model.playback.InterpolationType
 import com.nonxedy.playback.AsyncPacketPlaybackController
 import com.nonxedy.playback.CutscenePlaybackController
@@ -27,8 +27,6 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.World
-import org.bukkit.configuration.file.FileConfiguration
-import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
 import org.bukkit.scheduler.BukkitRunnable
 import org.bukkit.scheduler.BukkitTask
@@ -59,6 +57,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     private val playbackRecovery = PlaybackRecovery(plugin)
 
     private val cutsceneFolder = File(plugin.dataFolder, "cutscenes")
+    private val exportFolder = File(plugin.dataFolder, "exports")
 
     init {
         databaseService = createDatabaseService()
@@ -134,108 +133,68 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         return cutsceneFolder.mkdirs()
     }
 
+    // files in cutscenes/ are the store only while the database is unavailable.
+    // With a database each file is migrated once and renamed to *.yml.migrated
     private fun loadCutscenesFromFiles() {
         if (!ensureCutsceneFolderExists()) return
         val files = cutsceneFolder.listFiles { _, name -> name.endsWith(".yml") } ?: return
         var count = 0
         for (file in files) {
+            val name = file.nameWithoutExtension
+            if (!CutsceneNames.isValid(name)) {
+                plugin.logger.warning("Skipping cutscene with invalid name: ${file.name}")
+                continue
+            }
             try {
-                val config = YamlConfiguration.loadConfiguration(file)
-                val name = file.nameWithoutExtension
-                if (!CutsceneNames.isValid(name)) {
-                    plugin.logger.warning("Skipping cutscene with invalid name: ${file.name}")
+                val fromFile = CutsceneYaml.read(file, name)
+                val key = name.lowercase()
+                val existing = cutscenes[key]
+                if (existing != null) {
+                    // databases from before timeline events only have them in the file
+                    if (existing.events.isEmpty() && fromFile.events.isNotEmpty()) {
+                        val updated = existing.copy(events = fromFile.events)
+                        if (persistentStorageEnabled) databaseService.saveCutscene(updated)
+                        cutscenes[key] = updated
+                    }
+                    if (persistentStorageEnabled) markMigrated(file)
                     continue
                 }
-                if (cutscenes.containsKey(name.lowercase())) {
-                    val existing = cutscenes[name.lowercase()]!!
-                    if (existing.events.isEmpty()) {
-                        val fileEvents = TimelineEvents.readYaml(config)
-                        if (fileEvents.isNotEmpty()) {
-                            val updated = existing.copy(events = fileEvents)
-                            cutscenes[name.lowercase()] = updated
-                            if (persistentStorageEnabled) {
-                                try { databaseService.saveCutscene(updated) } catch (_: Exception) { }
-                            }
-                        }
-                    }
-                    continue
+                if (fromFile.frames.isEmpty()) continue
+                if (persistentStorageEnabled) {
+                    databaseService.saveCutscene(fromFile)
+                    plugin.logger.info("Migrated cutscene from file to database: $name")
+                    markMigrated(file)
                 }
-                val frames = mutableListOf<CutsceneFrame>()
-                val framesSection = config.getConfigurationSection("frames")
-                val frameDurationMs = loadFrameDurationMs(config)
-                if (framesSection != null) {
-                    for (key in framesSection.getKeys(false)) {
-                        val sec = framesSection.getConfigurationSection(key) ?: continue
-                        val worldName = sec.getString("world") ?: continue
-                        val world = Bukkit.getWorld(worldName) ?: continue
-                        val loc = Location(
-                            world,
-                            sec.getDouble("x"),
-                            sec.getDouble("y"),
-                            sec.getDouble("z"),
-                            sec.getDouble("yaw").toFloat(),
-                            sec.getDouble("pitch").toFloat()
-                        )
-                        val segmentMs = sec.getLong("segment-ms", -1L).takeIf { it > 0L }
-                        frames.add(CutsceneFrame(loc, worldName, segmentMs))
-                    }
-                }
-                if (frames.isNotEmpty()) {
-                    val events = TimelineEvents.readYaml(config)
-                    val cutscene = Cutscene(name, frames, frameDurationMs, events)
-                    cutscenes[name.lowercase()] = cutscene
-                    count++
-                    if (persistentStorageEnabled) {
-                        try {
-                            databaseService.saveCutscene(cutscene)
-                            plugin.logger.info("Migrated cutscene from file to database: $name")
-                        } catch (dbEx: Exception) {
-                            plugin.logger.log(Level.WARNING, "Failed to migrate cutscene to database: $name", dbEx)
-                        }
-                    }
-                }
+                cutscenes[key] = fromFile
+                count++
             } catch (e: Exception) {
-                plugin.logger.warning("Failed to load cutscene from file: ${file.name}")
+                plugin.logger.log(Level.WARNING, "Failed to load cutscene from file: ${file.name}", e)
             }
         }
         if (count > 0) plugin.logger.info("Loaded $count cutscenes from files")
     }
 
+    private fun markMigrated(file: File) {
+        val target = File(file.parentFile, "${file.name}.migrated")
+        if (target.exists()) target.delete()
+        if (!file.renameTo(target)) {
+            plugin.logger.warning("Could not rename migrated cutscene file: ${file.absolutePath}")
+        }
+    }
+
     private fun saveCutscene(cutscene: Cutscene) {
-        if (persistentStorageEnabled) databaseService.saveCutscene(cutscene)
-        saveCutsceneToFile(cutscene)
-    }
-
-    private fun saveCutsceneToFile(cutscene: Cutscene) {
+        if (persistentStorageEnabled) {
+            databaseService.saveCutscene(cutscene)
+            return
+        }
         if (!ensureCutsceneFolderExists()) throw IOException("Cutscene directory unavailable")
-        if (!CutsceneNames.isValid(cutscene.name)) {
-            throw IOException("Invalid cutscene name: ${cutscene.name}")
-        }
-        val file = cutsceneFile(cutscene.name)
-        val config = YamlConfiguration()
-        config.set("name", cutscene.name)
-        config.set("frame-duration-ms", cutscene.frameDurationMs)
-        config.set("ticks-per-frame", cutscene.ticksPerFrame)
-        config.set("schema-version", 1)
-        for (i in cutscene.frames.indices) {
-            val f = cutscene.frames[i]
-            config.set("frames.$i.world", f.worldName)
-            config.set("frames.$i.x", f.location.x)
-            config.set("frames.$i.y", f.location.y)
-            config.set("frames.$i.z", f.location.z)
-            config.set("frames.$i.yaw", f.location.yaw)
-            config.set("frames.$i.pitch", f.location.pitch)
-            f.segmentMs?.let { config.set("frames.$i.segment-ms", it) }
-        }
-        TimelineEvents.writeYaml(config, cutscene.events)
-        config.save(file)
+        CutsceneYaml.write(cutscene, cutsceneFile(cutscene.name))
     }
 
-    private fun loadFrameDurationMs(config: FileConfiguration): Long {
-        val stored = config.getLong("frame-duration-ms", -1L)
-        if (stored > 0L) return stored
-        val legacy = config.getInt("ticks-per-frame", 1).coerceAtLeast(1)
-        return legacy * 50L
+    private fun deleteStoredCutscene(name: String) {
+        if (persistentStorageEnabled) databaseService.deleteCutscene(name)
+        val file = cutsceneFile(name)
+        if (file.exists() && !file.delete()) throw IOException("Failed to delete cutscene file: ${file.absolutePath}")
     }
 
     // Recording
@@ -561,18 +520,12 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
             player.sendMessage(plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cNot found")
             return
         }
-        val file = cutsceneFile(cutscene.name)
-        if (file.exists() && !file.delete()) {
-            plugin.logger.warning("Failed to delete cutscene file: ${file.absolutePath}")
+        try {
+            deleteStoredCutscene(cutscene.name)
+        } catch (e: Exception) {
+            plugin.logger.log(Level.SEVERE, "Failed to delete cutscene: ${cutscene.name}", e)
             player.sendMessage(plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete.")
             return
-        }
-        if (persistentStorageEnabled) {
-            try { databaseService.deleteCutscene(cutscene.name) } catch (e: Exception) {
-                plugin.logger.log(Level.SEVERE, "Failed to delete from database: ${cutscene.name}", e)
-                player.sendMessage(plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete.")
-                return
-            }
         }
         cutscenes.remove(normalized)
         player.sendMessage(plugin.configManager.getMessage("cutscene-deleted")?.replace("{name}", name) ?: "§aDeleted.")
@@ -620,6 +573,18 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
         }
     }
 
+    override fun pausePlayback(player: Player): Boolean =
+        activeControllers[player.uniqueId]?.pause() ?: false
+
+    override fun resumePlayback(player: Player): Boolean =
+        activeControllers[player.uniqueId]?.resume() ?: false
+
+    override fun skipPlayback(player: Player): Boolean =
+        activeControllers[player.uniqueId]?.skip() ?: false
+
+    override fun isPlaybackPaused(player: Player): Boolean =
+        activeControllers[player.uniqueId]?.isPaused() ?: false
+
     override fun cancelPathVisualization(player: Player) {
         val playerId = player.uniqueId
         val session = playerSessions[playerId]
@@ -654,6 +619,116 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun getCutsceneNames(): List<String> = cutscenes.keys.toList()
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
 
+    // a name is taken by a stored cutscene, a recording that will be saved under
+    // it, or an open editor draft
+    private fun isNameTaken(name: String): Boolean {
+        if (cutscenes.containsKey(name.lowercase())) return true
+        val recording = playerSessions.values.any {
+            (it is PlayerSession.RecordingCountdown || it is PlayerSession.Recording) &&
+                it.name.equals(name, ignoreCase = true)
+        }
+        return recording || plugin.keyframeEditor.isEditingCutscene(name)
+    }
+
+    private fun isInUse(name: String): Boolean =
+        playerSessions.values.any { it.name.equals(name, ignoreCase = true) } ||
+            plugin.keyframeEditor.isEditingCutscene(name)
+
+    override fun renameCutscene(name: String, newName: String): CutsceneOpResult {
+        val cutscene = cutscenes[name.lowercase()] ?: return CutsceneOpResult.NOT_FOUND
+        if (!CutsceneNames.isValid(newName)) return CutsceneOpResult.INVALID_NAME
+        if (cutscene.name == newName) return CutsceneOpResult.OK
+        val caseOnly = cutscene.name.equals(newName, ignoreCase = true)
+        if (!caseOnly && isNameTaken(newName)) return CutsceneOpResult.NAME_TAKEN
+        if (isInUse(cutscene.name)) return CutsceneOpResult.IN_USE
+
+        val renamed = cutscene.copy(name = newName)
+        try {
+            if (caseOnly) {
+                // a case-insensitive database matches the new name to the old row
+                deleteStoredCutscene(cutscene.name)
+                try {
+                    saveCutscene(renamed)
+                } catch (e: Exception) {
+                    runCatching { saveCutscene(cutscene) }
+                    throw e
+                }
+            } else {
+                saveCutscene(renamed)
+                try {
+                    deleteStoredCutscene(cutscene.name)
+                } catch (e: Exception) {
+                    runCatching { deleteStoredCutscene(newName) }
+                    throw e
+                }
+            }
+        } catch (e: Exception) {
+            plugin.logger.log(Level.SEVERE, "Failed to rename cutscene ${cutscene.name} to $newName", e)
+            return CutsceneOpResult.FAILED
+        }
+        cutscenes.remove(cutscene.name.lowercase())
+        cutscenes[newName.lowercase()] = renamed
+        return CutsceneOpResult.OK
+    }
+
+    override fun copyCutscene(name: String, newName: String): CutsceneOpResult {
+        val cutscene = cutscenes[name.lowercase()] ?: return CutsceneOpResult.NOT_FOUND
+        if (!CutsceneNames.isValid(newName)) return CutsceneOpResult.INVALID_NAME
+        if (isNameTaken(newName)) return CutsceneOpResult.NAME_TAKEN
+        val copy = cutscene.copy(name = newName)
+        try {
+            saveCutscene(copy)
+        } catch (e: Exception) {
+            plugin.logger.log(Level.SEVERE, "Failed to copy cutscene ${cutscene.name} to $newName", e)
+            return CutsceneOpResult.FAILED
+        }
+        cutscenes[newName.lowercase()] = copy
+        return CutsceneOpResult.OK
+    }
+
+    override fun exportCutscene(name: String): CutsceneOpResult {
+        val cutscene = cutscenes[name.lowercase()] ?: return CutsceneOpResult.NOT_FOUND
+        try {
+            if (!exportFolder.isDirectory && !exportFolder.mkdirs()) {
+                throw IOException("Export directory unavailable: ${exportFolder.absolutePath}")
+            }
+            CutsceneYaml.write(cutscene, fileIn(exportFolder, cutscene.name))
+        } catch (e: Exception) {
+            plugin.logger.log(Level.SEVERE, "Failed to export cutscene ${cutscene.name}", e)
+            return CutsceneOpResult.FAILED
+        }
+        return CutsceneOpResult.OK
+    }
+
+    override fun importCutscene(fileName: String, newName: String?): CutsceneOpResult {
+        val file = findExportFile(fileName.removeSuffix(".yml")) ?: return CutsceneOpResult.FILE_NOT_FOUND
+        val name = newName ?: file.nameWithoutExtension
+        if (!CutsceneNames.isValid(name)) return CutsceneOpResult.INVALID_NAME
+        if (isNameTaken(name)) return CutsceneOpResult.NAME_TAKEN
+
+        val cutscene = try {
+            CutsceneYaml.read(file, name)
+        } catch (e: Exception) {
+            plugin.logger.log(Level.WARNING, "Failed to read cutscene file ${file.name}", e)
+            return CutsceneOpResult.INVALID_FILE
+        }
+        if (cutscene.frames.size < 2) return CutsceneOpResult.INVALID_FILE
+        try {
+            saveCutscene(cutscene)
+        } catch (e: Exception) {
+            plugin.logger.log(Level.SEVERE, "Failed to import cutscene $name", e)
+            return CutsceneOpResult.FAILED
+        }
+        cutscenes[name.lowercase()] = cutscene
+        return CutsceneOpResult.OK
+    }
+
+    override fun getExportNames(): List<String> =
+        exportFolder.listFiles { _, n -> n.endsWith(".yml") }
+            ?.map { it.nameWithoutExtension }
+            ?.filter { CutsceneNames.isValid(it) }
+            .orEmpty()
+
     override fun saveEditedCutscene(cutscene: Cutscene) {
         val key = cutscene.name.lowercase()
         val previous = cutscenes[key]
@@ -686,17 +761,25 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     // Helpers
-    private fun cutsceneFile(name: String): File {
+    private fun cutsceneFile(name: String): File = fileIn(cutsceneFolder, name)
+
+    private fun fileIn(folder: File, name: String): File {
         if (!CutsceneNames.isValid(name)) {
             throw IOException("Invalid cutscene name: $name")
         }
-        val file = File(cutsceneFolder, "$name.yml")
-        val folder = cutsceneFolder.canonicalFile
-        val resolved = file.canonicalFile
-        if (resolved.parentFile != folder) {
+        val file = File(folder, "$name.yml")
+        if (file.canonicalFile.parentFile != folder.canonicalFile) {
             throw IOException("Cutscene path escaped storage directory: $name")
         }
         return file
+    }
+
+    private fun findExportFile(name: String): File? {
+        if (!CutsceneNames.isValid(name)) return null
+        val exact = fileIn(exportFolder, name)
+        if (exact.isFile) return exact
+        return exportFolder.listFiles { _, n -> n.endsWith(".yml") }
+            ?.firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
     }
 
     private companion object {

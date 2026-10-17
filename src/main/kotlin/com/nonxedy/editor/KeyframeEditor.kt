@@ -60,6 +60,8 @@ class KeyframeEditor(private val plugin: Nonscenes) : Listener {
 
     fun isEditing(player: Player): Boolean = sessions.containsKey(player.uniqueId)
 
+    fun isEditingCutscene(name: String): Boolean = sessions.values.any { it.name.equals(name, ignoreCase = true) }
+
     fun keyframeCount(player: Player): Int = sessions[player.uniqueId]?.track?.size ?: 0
 
     // session lifecycle

@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManagerInterface
+import com.nonxedy.core.CutsceneOpResult
 import com.nonxedy.model.timeline.TimelineEvent
 import com.nonxedy.model.timeline.TimelineEventType
 import com.nonxedy.util.CutsceneNames
@@ -27,6 +28,8 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         when (args[0].lowercase()) {
             "play" -> handlePlay(sender, args)
             "event" -> handleEvent(sender, args)
+            in PLAYBACK_CONTROLS -> handlePlaybackControl(sender, args)
+            in LIBRARY_COMMANDS -> handleLibrary(sender, args)
             in EDITOR_COMMANDS -> {
                 if (sender !is Player) {
                     sender.sendMessage(configManager.getMessage("player-only-command"))
@@ -104,6 +107,129 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                     .replace("{player}", target.name)
             )
         }
+    }
+
+    private fun handlePlaybackControl(sender: CommandSender, args: Array<String>) {
+        val action = args[0].lowercase()
+        val permission = if (action == "skip") "nonscene.skip" else "nonscene.pause"
+        val target = when {
+            args.size >= 2 -> Bukkit.getPlayerExact(args[1]) ?: run {
+                sender.sendMessage(configManager.getMessage("player-not-online").replace("{player}", args[1]))
+                return
+            }
+            sender is Player -> sender
+            else -> {
+                sender.sendMessage(configManager.getMessage("invalid-playback-control-args").replace("{action}", action))
+                return
+            }
+        }
+        if (!sender.hasPermission(if (target == sender) permission else "$permission.others")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+        if (!cutsceneManager.isWatchingCutscene(target)) {
+            sender.sendMessage(configManager.getMessage("not-watching").replace("{player}", target.name))
+            return
+        }
+
+        val done = when (action) {
+            "skip" -> cutsceneManager.skipPlayback(target)
+            "pause" -> cutsceneManager.pausePlayback(target)
+            else -> cutsceneManager.resumePlayback(target)
+        }
+        if (!done) {
+            sender.sendMessage(configManager.getMessage("playback-control-unavailable").replace("{action}", action))
+            return
+        }
+        // the viewer gets the usual finished message after a skip
+        if (action != "skip") target.sendMessage(configManager.getMessage("playback-$action"))
+        if (sender != target) {
+            sender.sendMessage(
+                configManager.getMessage("playback-$action-other").replace("{player}", target.name)
+            )
+        }
+    }
+
+    private fun handleLibrary(sender: CommandSender, args: Array<String>) {
+        val action = args[0].lowercase()
+        if (!sender.hasPermission("nonscene.$action")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+        val needed = if (action == "rename" || action == "copy") 3 else 2
+        if (args.size < needed) {
+            sender.sendMessage(configManager.getMessage("invalid-$action-args"))
+            return
+        }
+        val name = args[1]
+        val newName = args.getOrNull(2)
+
+        when (action) {
+            "rename" -> {
+                // looked up before the rename, the triggers still point at the old name
+                val references = plugin.triggerService?.references(name).orEmpty()
+                val oldName = cutsceneManager.getCutscene(name)?.name ?: name
+                val result = cutsceneManager.renameCutscene(name, newName!!)
+                if (result != CutsceneOpResult.OK) return sendFailure(sender, result, name, newName)
+                sender.sendMessage(
+                    configManager.getMessage("cutscene-renamed").replace("{name}", oldName).replace("{new}", newName)
+                )
+                if (references.isNotEmpty()) {
+                    sender.sendMessage(
+                        configManager.getMessage("rename-trigger-warning")
+                            .replace("{name}", oldName)
+                            .replace("{triggers}", references.joinToString(", "))
+                    )
+                }
+            }
+            "copy" -> {
+                val result = cutsceneManager.copyCutscene(name, newName!!)
+                if (result != CutsceneOpResult.OK) return sendFailure(sender, result, name, newName)
+                sender.sendMessage(
+                    configManager.getMessage("cutscene-copied").replace("{name}", name).replace("{new}", newName)
+                )
+            }
+            "export" -> {
+                val result = cutsceneManager.exportCutscene(name)
+                if (result != CutsceneOpResult.OK) return sendFailure(sender, result, name, null)
+                val stored = cutsceneManager.getCutscene(name)?.name ?: name
+                sender.sendMessage(
+                    configManager.getMessage("cutscene-exported")
+                        .replace("{name}", stored)
+                        .replace("{file}", "exports/$stored.yml")
+                )
+            }
+            "import" -> {
+                val result = cutsceneManager.importCutscene(name, newName)
+                val imported = newName ?: name.removeSuffix(".yml")
+                if (result != CutsceneOpResult.OK) return sendFailure(sender, result, name, imported)
+                val cutscene = cutsceneManager.getCutscene(imported)
+                sender.sendMessage(
+                    configManager.getMessage("cutscene-imported")
+                        .replace("{name}", cutscene?.name ?: imported)
+                        .replace("{frames}", cutscene?.frames?.size?.toString() ?: "0")
+                )
+                val missingWorld = cutscene?.frames?.firstOrNull { it.resolveLocation() == null }?.worldName
+                if (missingWorld != null) {
+                    sender.sendMessage(configManager.getMessage("import-world-missing").replace("{world}", missingWorld))
+                }
+            }
+        }
+    }
+
+    private fun sendFailure(sender: CommandSender, result: CutsceneOpResult, name: String, newName: String?) {
+        val message = when (result) {
+            CutsceneOpResult.OK -> return
+            CutsceneOpResult.NOT_FOUND -> configManager.getMessage("cutscene-not-found").replace("{name}", name)
+            CutsceneOpResult.INVALID_NAME -> configManager.getMessage("invalid-cutscene-name")
+            CutsceneOpResult.NAME_TAKEN ->
+                configManager.getMessage("cutscene-already-exists").replace("{name}", newName ?: name)
+            CutsceneOpResult.IN_USE -> configManager.getMessage("cutscene-in-use").replace("{name}", name)
+            CutsceneOpResult.FILE_NOT_FOUND -> configManager.getMessage("import-file-not-found").replace("{file}", name)
+            CutsceneOpResult.INVALID_FILE -> configManager.getMessage("import-invalid-file").replace("{file}", name)
+            CutsceneOpResult.FAILED -> configManager.getMessage("error-occurred")
+        }
+        sender.sendMessage(message)
     }
 
     private fun handleEvent(sender: CommandSender, args: Array<String>) {
@@ -349,6 +475,9 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             val subCommands = mutableListOf<String>()
             if (sender.hasPermission("nonscene.play")) subCommands.add("play")
             if (sender.hasPermission("nonscene.event")) subCommands.add("event")
+            if (sender.hasPermission("nonscene.skip")) subCommands.add("skip")
+            if (sender.hasPermission("nonscene.pause")) subCommands.addAll(listOf("pause", "resume"))
+            LIBRARY_COMMANDS.filterTo(subCommands) { sender.hasPermission("nonscene.$it") }
             if (sender is Player) {
                 if (sender.hasPermission("nonscene.start")) subCommands.add("start")
                 if (sender.hasPermission("nonscene.delete")) subCommands.add("delete")
@@ -369,6 +498,17 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             val subCommand = args[0].lowercase()
             if (subCommand == "play" && sender.hasPermission("nonscene.play")) {
                 return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
+            }
+            if (subCommand in LIBRARY_COMMANDS && sender.hasPermission("nonscene.$subCommand")) {
+                val options = if (subCommand == "import") cutsceneManager.getExportNames()
+                else cutsceneManager.getCutsceneNames()
+                return filterCompletions(options, args[1])
+            }
+            if (subCommand in PLAYBACK_CONTROLS) {
+                val permission = if (subCommand == "skip") "nonscene.skip.others" else "nonscene.pause.others"
+                if (sender.hasPermission(permission)) {
+                    return filterCompletions(Bukkit.getOnlinePlayers().map { it.name }, args[1])
+                }
             }
             if (sender is Player &&
                 (subCommand == "delete" || subCommand == "showpath") &&
@@ -423,5 +563,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
     private companion object {
         val EDITOR_COMMANDS = setOf("edit", "key", "save", "discard", "preview")
         val KEY_INDEX_ACTIONS = setOf("add", "remove", "move", "speed", "tp")
+        val PLAYBACK_CONTROLS = setOf("skip", "pause", "resume")
+        val LIBRARY_COMMANDS = listOf("rename", "copy", "export", "import")
     }
 }

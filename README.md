@@ -53,7 +53,12 @@ cd nonscenes
 ## Commands
 
 - `/nonscene start <name> <seconds>` - Start recording a cutscene
-- `/nonscene play <name>` - Play a cutscene
+- `/nonscene play <name> [player]` - Play a cutscene
+- `/nonscene skip [player]` - Skip a cutscene (viewers can also sneak, see `skip-on-sneak`)
+- `/nonscene pause [player]` / `resume [player]` - Freeze and continue the camera and timeline
+- `/nonscene rename <name> <new-name>` / `copy <name> <new-name>` - Rename or copy a cutscene
+- `/nonscene export <name>` - Write `plugins/nonscenes/exports/<name>.yml`
+- `/nonscene import <file> [new-name]` - Load a cutscene from `plugins/nonscenes/exports/`
 - `/nonscene all` - List all cutscenes
 - `/nonscene delete <name>` - Delete a cutscene
 - `/nonscene showpath <name>` - Show cutscene path
@@ -62,6 +67,20 @@ cd nonscenes
 - `/nonscene key speed <#> <seconds>` - How long the camera takes from keyframe `#` to the next
 - `/nonscene key tp <#>` / `key list` - Go to a keyframe / list keyframes
 - `/nonscene preview` / `save` / `discard` - Watch, save or throw away the draft
+
+### Skip, pause and sharing
+
+Skipping ends a cutscene as completed: console and player command events that have
+not fired yet run right away, titles, sounds and particles are dropped. Pause works
+only while the camera moves, not during the fades around it.
+
+Cutscenes live in the configured database. `cutscenes/*.yml` is used only when the
+database cannot be reached; with a working database those files are migrated once
+and renamed to `*.yml.migrated`. To move a cutscene between servers, export it,
+copy the file into the other server's `exports/` folder and import it.
+
+Renaming a cutscene does not change `config.yml`; triggers that still use the old
+name are listed after the rename.
 
 ### Keyframe editor
 

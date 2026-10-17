@@ -119,7 +119,15 @@ class PlaybackGuardListener(private val plugin: Nonscenes) : Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onSneak(event: PlayerToggleSneakEvent) {
-        if (watching(event.player)) event.isCancelled = true
+        val player = event.player
+        if (!watching(player)) return
+        event.isCancelled = true
+        if (event.isSneaking &&
+            player.hasPermission("nonscene.skip") &&
+            plugin.configManager.getPlaybackSettings().skipOnSneak
+        ) {
+            plugin.cutsceneManager.skipPlayback(player)
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

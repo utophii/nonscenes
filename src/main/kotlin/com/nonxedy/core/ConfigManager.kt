@@ -176,7 +176,8 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
             interpolation = interpolation,
             smoothRotation = cfg.getBoolean("cutscene.playback.smooth-rotation", true),
             eyeHeight = cfg.getDouble("cutscene.playback.eye-height", 1.62),
-            fade = getFadeSettings(cfg)
+            fade = getFadeSettings(cfg),
+            skipOnSneak = cfg.getBoolean("cutscene.playback.skip-on-sneak", true)
         )
     }
 

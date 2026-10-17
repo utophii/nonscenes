@@ -20,6 +20,11 @@ interface CutsceneManagerInterface {
     fun cancelPathVisualization(player: Player)
     fun cancelAllSessions(player: Player)
 
+    fun pausePlayback(player: Player): Boolean
+    fun resumePlayback(player: Player): Boolean
+    fun skipPlayback(player: Player): Boolean
+    fun isPlaybackPaused(player: Player): Boolean
+
     fun hasActiveSession(player: Player): Boolean
     fun isRecording(player: Player): Boolean
     fun isWatchingCutscene(player: Player): Boolean
@@ -29,6 +34,12 @@ interface CutsceneManagerInterface {
     fun addTimelineEvent(name: String, event: TimelineEvent): Boolean
     fun clearTimelineEvents(name: String): Boolean
     fun saveEditedCutscene(cutscene: Cutscene)
+
+    fun renameCutscene(name: String, newName: String): CutsceneOpResult
+    fun copyCutscene(name: String, newName: String): CutsceneOpResult
+    fun exportCutscene(name: String): CutsceneOpResult
+    fun importCutscene(fileName: String, newName: String?): CutsceneOpResult
+    fun getExportNames(): List<String>
 
     fun createInterpolator(type: InterpolationType): PathInterpolator
     fun sampleCurve(cutscene: Cutscene, stepMs: Long = 50L): List<Location>

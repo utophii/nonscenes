@@ -5,6 +5,7 @@ import com.github.retrooper.packetevents.event.PacketListenerPriority
 import com.github.retrooper.packetevents.event.PacketReceiveEvent
 import com.github.retrooper.packetevents.protocol.packettype.PacketType
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommand
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommandUnsigned
 import com.nonxedy.Nonscenes
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -20,32 +21,31 @@ class PlaybackLookLock(private val plugin: Nonscenes) : PacketListenerAbstract(P
             PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION -> {
                 event.isCancelled = true
             }
-            else -> {
-                if (isBrigadierCommandPacket(event)) {
-                    val command = readChatCommand(event)
-                    if (!PlaybackCommandPolicy.isAllowedDuringPlayback(command)) {
-                        event.isCancelled = true
-                        Bukkit.getScheduler().runTask(plugin, Runnable {
-                            if (player.isOnline) {
-                                player.sendMessage(plugin.configManager.getMessage("command-disabled-during-cutscene"))
-                            }
-                        })
+            PacketType.Play.Client.CHAT_COMMAND,
+            PacketType.Play.Client.CHAT_COMMAND_UNSIGNED -> {
+                // unreadable packets are left to PlayerCommandPreprocessEvent
+                val command = readChatCommand(event) ?: return
+                if (PlaybackCommandPolicy.isAllowedDuringPlayback(command)) return
+                event.isCancelled = true
+                Bukkit.getScheduler().runTask(plugin, Runnable {
+                    if (player.isOnline) {
+                        player.sendMessage(plugin.configManager.getMessage("command-disabled-during-cutscene"))
                     }
-                }
+                })
             }
+            else -> Unit
         }
     }
 
-    private fun isBrigadierCommandPacket(event: PacketReceiveEvent): Boolean {
-        val name = event.packetType.name
-        return name.contains("CHAT_COMMAND")
-    }
-
-    private fun readChatCommand(event: PacketReceiveEvent): String {
+    private fun readChatCommand(event: PacketReceiveEvent): String? {
         return try {
-            WrapperPlayClientChatCommand(event).command.orEmpty()
+            if (event.packetType == PacketType.Play.Client.CHAT_COMMAND_UNSIGNED) {
+                WrapperPlayClientChatCommandUnsigned(event).command
+            } else {
+                WrapperPlayClientChatCommand(event).command
+            }
         } catch (_: Exception) {
-            ""
+            null
         }
     }
 }

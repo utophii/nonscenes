@@ -17,7 +17,7 @@ commands:
   nonscene:
     description: Main command for cutscene management
     aliases: [ns]
-    usage: /nonscene <start|delete|all|play|showpath|stop|event|edit|key|preview|save|discard> [args]
+    usage: /nonscene <start|delete|all|play|showpath|stop|skip|pause|resume|rename|copy|export|import|event|edit|key|preview|save|discard> [args]
     permission: nonscene.use
 
 permissions:
@@ -45,6 +45,30 @@ permissions:
   nonscene.stop:
     description: Allows cancelling recording/playback
     default: op
+  nonscene.skip:
+    description: Allows skipping your own cutscene (command or sneak)
+    default: op
+  nonscene.skip.others:
+    description: Allows skipping another player's cutscene
+    default: op
+  nonscene.pause:
+    description: Allows pausing and resuming your own cutscene
+    default: op
+  nonscene.pause.others:
+    description: Allows pausing and resuming another player's cutscene
+    default: op
+  nonscene.rename:
+    description: Allows renaming cutscenes
+    default: op
+  nonscene.copy:
+    description: Allows copying cutscenes
+    default: op
+  nonscene.export:
+    description: Allows exporting a cutscene to plugins/nonscenes/exports
+    default: op
+  nonscene.import:
+    description: Allows importing a cutscene from plugins/nonscenes/exports
+    default: op
   nonscene.event:
     description: Allows editing cutscene timeline events
     default: op
@@ -63,5 +87,13 @@ permissions:
       nonscene.play.others: true
       nonscene.showpath: true
       nonscene.stop: true
+      nonscene.skip: true
+      nonscene.skip.others: true
+      nonscene.pause: true
+      nonscene.pause.others: true
+      nonscene.rename: true
+      nonscene.copy: true
+      nonscene.export: true
+      nonscene.import: true
       nonscene.event: true
       nonscene.edit: true

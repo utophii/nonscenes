@@ -2,6 +2,8 @@ package com.nonxedy.playback
 
 import com.nonxedy.model.playback.FadeSettings
 import com.nonxedy.model.timeline.TimelineEvent
+import com.nonxedy.model.timeline.TimelineEventType
+import com.nonxedy.model.timeline.TimelineEvents
 import com.nonxedy.util.ColorUtil
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
@@ -38,6 +40,10 @@ class AsyncPacketPlaybackController(
     @Volatile private var loop: ScheduledFuture<*>? = null
     @Volatile private var rig: CameraRig? = null
     @Volatile private var playerRef: Player? = null
+    @Volatile private var timeline: TimelineClock? = null
+    @Volatile private var startNs = 0L
+    @Volatile private var pausedAtNs = NOT_PAUSED
+    @Volatile private var totalDurationMs = 0L
 
     // main thread only
     private var originalLocation: Location? = null
@@ -58,6 +64,7 @@ class AsyncPacketPlaybackController(
         active.set(true)
         cleanedUp.set(false)
         playerRef = player
+        this.totalDurationMs = totalDurationMs
         originalLocation = player.location.clone()
 
         val pathArray = path.toTypedArray()
@@ -102,13 +109,13 @@ class AsyncPacketPlaybackController(
 
         val lastIndex = pathArray.lastIndex
         val intervalNs = 1_000_000_000L / updateRate
-        val startNs = System.nanoTime()
-        val timeline = TimelineClock(plugin, player, cutsceneName, timelineEvents)
+        startNs = System.nanoTime()
+        val timeline = TimelineClock(plugin, player, cutsceneName, timelineEvents).also { this.timeline = it }
         val fadeOutAt = totalDurationMs - fade.outMs
 
         loop = executor.scheduleWithFixedDelay({
             try {
-                tick(player, pathArray, lastIndex, startNs, timeline, fadeOutAt, totalDurationMs)
+                tick(player, pathArray, lastIndex, timeline, fadeOutAt, totalDurationMs)
             } catch (e: Throwable) {
                 Bukkit.getScheduler().runTask(plugin, Runnable { abort(player, "loop", e) })
                 shutdown()
@@ -120,12 +127,15 @@ class AsyncPacketPlaybackController(
         player: Player,
         pathArray: Array<Location>,
         lastIndex: Int,
-        startNs: Long,
         timeline: TimelineClock,
         fadeOutAt: Long,
         totalDurationMs: Long
     ) {
-        if (!active.get() || !player.isOnline) {
+        if (!active.get()) {
+            shutdown()
+            return
+        }
+        if (!player.isOnline) {
             active.set(false)
             shutdown()
             Bukkit.getScheduler().runTask(plugin, Runnable {
@@ -135,6 +145,7 @@ class AsyncPacketPlaybackController(
             return
         }
 
+        if (pausedAtNs != NOT_PAUSED) return
         val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
         timeline.pulse(elapsed)
         if (fade.enabled && elapsed >= fadeOutAt && fadingOut.compareAndSet(false, true)) {
@@ -198,6 +209,53 @@ class AsyncPacketPlaybackController(
     }
 
     override fun isActive(): Boolean = active.get()
+
+    // only while the camera runs
+    override fun pause(): Boolean {
+        if (!active.get() || loop == null || fadingOut.get() || pausedAtNs != NOT_PAUSED) return false
+        pausedAtNs = System.nanoTime()
+        return true
+    }
+
+    override fun resume(): Boolean {
+        val at = pausedAtNs
+        if (at == NOT_PAUSED || !active.get()) return false
+        // shift the start before unpausing
+        startNs += System.nanoTime() - at
+        pausedAtNs = NOT_PAUSED
+        return true
+    }
+
+    override fun isPaused(): Boolean = active.get() && pausedAtNs != NOT_PAUSED
+
+    override fun skip(): Boolean {
+        val player = playerRef ?: return false
+        if (!active.compareAndSet(true, false)) return false
+        shutdown()
+
+        val pending = timeline?.drain(totalDurationMs) ?: timelineEvents.filter { it.timeMs <= totalDurationMs }
+        for (event in pending) {
+            if (event.type != TimelineEventType.CONSOLE && event.type != TimelineEventType.PLAYER) continue
+            try {
+                TimelineEvents.fire(player, cutsceneName, event)
+            } catch (e: Exception) {
+                plugin.logger.log(Level.WARNING, "Timeline event failed while skipping '$cutsceneName'", e)
+            }
+        }
+
+        val finish = Runnable {
+            cleanup(player)
+            onComplete()
+        }
+        // the screen is already black when the camera has not cut in yet or is fading out
+        if (fade.enabled && entered && !fadingOut.get()) {
+            ScreenFade.cover(player, fade)
+            Bukkit.getScheduler().runTaskLater(plugin, finish, fade.outTicks.toLong())
+        } else {
+            finish.run()
+        }
+        return true
+    }
 
     // Interpolates between the two neighbouring path points using the fractional
     // progress `t` (in 0..1). `lastIndex` is the index of the final path point
@@ -288,5 +346,6 @@ class AsyncPacketPlaybackController(
     private companion object {
         val MINI_MESSAGE: MiniMessage = MiniMessage.miniMessage()
         val ACTION_BAR_INTERVAL_NS: Long = TimeUnit.MILLISECONDS.toNanos(250)
+        const val NOT_PAUSED: Long = Long.MIN_VALUE
     }
 }

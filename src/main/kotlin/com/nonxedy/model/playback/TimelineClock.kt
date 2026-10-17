@@ -15,6 +15,7 @@ class TimelineClock(
 ) {
     private val queue = ArrayDeque(events.sortedBy { it.timeMs })
 
+    @Synchronized
     fun pulse(elapsedMs: Long) {
         while (queue.isNotEmpty() && queue.first().timeMs <= elapsedMs) {
             val event = queue.removeFirst()
@@ -22,5 +23,12 @@ class TimelineClock(
                 if (player.isOnline) TimelineEvents.fire(player, cutsceneName, event)
             })
         }
+    }
+
+    @Synchronized
+    fun drain(untilMs: Long): List<TimelineEvent> {
+        val rest = queue.filter { it.timeMs <= untilMs }
+        queue.clear()
+        return rest
     }
 }

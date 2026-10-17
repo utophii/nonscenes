@@ -31,7 +31,8 @@ class Nonscenes : JavaPlugin() {
         private set
     lateinit var keyframeEditor: KeyframeEditor
         private set
-    private var triggerService: TriggerService? = null
+    var triggerService: TriggerService? = null
+        private set
 
     override fun onEnable() {
         try {

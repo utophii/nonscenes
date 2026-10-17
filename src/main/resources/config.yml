@@ -51,6 +51,10 @@ cutscene:
     # BEZIER      - tighter curves that never swing past a keyframe.
     interpolation: CATMULL_ROM
 
+    # Sneaking skips the cutscene for viewers with nonscene.skip. Console and
+    # player command events that have not fired yet still run.
+    skip-on-sneak: true
+
     # Smooth rotation transitions (yaw/pitch wrapping handled automatically)
     smooth-rotation: true
 
