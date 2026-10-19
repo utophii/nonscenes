@@ -67,6 +67,7 @@ cd nonscenes
 - `/nonscene key speed <#> <seconds>` - How long the camera takes from keyframe `#` to the next
 - `/nonscene key tp <#>` / `key list` - Go to a keyframe / list keyframes
 - `/nonscene preview` / `save` / `discard` - Watch, save or throw away the draft
+- `/nonscene reload` - Reload `config.yml`, `messages.yml` and triggers (storage changes need a restart)
 
 ### Skip, pause and sharing
 

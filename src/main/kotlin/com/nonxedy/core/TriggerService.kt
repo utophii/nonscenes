@@ -18,7 +18,8 @@ class TriggerService(private val plugin: Nonscenes) : Listener {
     private val seen = SeenStore(plugin)
     private val lastRegion = ConcurrentHashMap<UUID, String>()
     private val registered = mutableListOf<Command>()
-    val settings: TriggerSettings = loadSettings()
+    var settings: TriggerSettings = loadSettings()
+        private set
 
     fun register() {
         plugin.server.pluginManager.registerEvents(this, plugin)
@@ -26,10 +27,15 @@ class TriggerService(private val plugin: Nonscenes) : Listener {
     }
 
     fun unregister() {
-        registered.forEach { command ->
-            command.unregister(plugin.server.commandMap)
-        }
-        registered.clear()
+        unregisterAliasCommands()
+    }
+
+    fun reload() {
+        unregisterAliasCommands()
+        settings = loadSettings()
+        registerAliasCommands()
+        // clients only see added or removed aliases in tab completion after a resync
+        plugin.server.onlinePlayers.forEach { it.updateCommands() }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -108,6 +114,14 @@ class TriggerService(private val plugin: Nonscenes) : Listener {
             plugin.server.commandMap.register("nonscenes", command)
             registered.add(command)
         }
+    }
+
+    private fun unregisterAliasCommands() {
+        val commandMap = plugin.server.commandMap
+        // Command.unregister alone leaves the alias and its "nonscenes:" form executable
+        commandMap.knownCommands.values.removeIf { it in registered }
+        registered.forEach { it.unregister(commandMap) }
+        registered.clear()
     }
 
     private fun loadSettings(): TriggerSettings {

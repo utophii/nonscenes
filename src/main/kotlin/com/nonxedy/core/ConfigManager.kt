@@ -120,22 +120,11 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
     override fun getHelpMessages(): List<String> = getMessageList("help-messages")
 
     override fun reloadConfigs() {
-        config = configFile?.let { YamlConfiguration.loadConfiguration(it) }
-        messages = messagesFile?.let { YamlConfiguration.loadConfiguration(it) }
-        val defaultConfigStream = plugin.getResource("config.yml")
-        if (defaultConfigStream != null) {
-            val defaultConfig = YamlConfiguration.loadConfiguration(
-                InputStreamReader(defaultConfigStream, StandardCharsets.UTF_8)
-            )
-            config?.setDefaults(defaultConfig)
+        for (name in listOf("config.yml", "messages.yml")) {
+            val file = File(plugin.dataFolder, name)
+            if (file.exists()) YamlConfiguration().load(file)
         }
-        val defaultMessagesStream = plugin.getResource("messages.yml")
-        if (defaultMessagesStream != null) {
-            val defaultMessages = YamlConfiguration.loadConfiguration(
-                InputStreamReader(defaultMessagesStream, StandardCharsets.UTF_8)
-            )
-            messages?.setDefaults(defaultMessages)
-        }
+        loadConfigs()
     }
 
     override fun saveConfig() {

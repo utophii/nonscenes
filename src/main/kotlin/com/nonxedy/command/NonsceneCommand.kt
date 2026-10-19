@@ -5,6 +5,7 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
+import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.entity.Player
 import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
@@ -27,6 +28,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
 
         when (args[0].lowercase()) {
             "play" -> handlePlay(sender, args)
+            "reload" -> handleReload(sender)
             "event" -> handleEvent(sender, args)
             in PLAYBACK_CONTROLS -> handlePlaybackControl(sender, args)
             in LIBRARY_COMMANDS -> handleLibrary(sender, args)
@@ -108,6 +110,32 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             )
         }
     }
+
+    private fun handleReload(sender: CommandSender) {
+        if (!sender.hasPermission("nonscene.reload")) {
+            sender.sendMessage(configManager.getMessage("no-permission"))
+            return
+        }
+        val storageBefore = storageSettings()
+        try {
+            configManager.reloadConfigs()
+        } catch (e: Exception) {
+            plugin.logger.warning("Reload failed, keeping the current config: ${e.message}")
+            sender.sendMessage(configManager.getMessage("reload-failed"))
+            return
+        }
+        plugin.triggerService?.reload()
+        sender.sendMessage(configManager.getMessage("config-reloaded"))
+        // the database connection is only opened on startup
+        if (storageSettings() != storageBefore) {
+            sender.sendMessage(configManager.getMessage("reload-storage-restart"))
+        }
+    }
+
+    private fun storageSettings(): Map<String, Any?> =
+        configManager.config?.getConfigurationSection("storage")?.getValues(true)
+            ?.filterValues { it !is ConfigurationSection }
+            .orEmpty()
 
     private fun handlePlaybackControl(sender: CommandSender, args: Array<String>) {
         val action = args[0].lowercase()
@@ -477,6 +505,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             if (sender.hasPermission("nonscene.event")) subCommands.add("event")
             if (sender.hasPermission("nonscene.skip")) subCommands.add("skip")
             if (sender.hasPermission("nonscene.pause")) subCommands.addAll(listOf("pause", "resume"))
+            if (sender.hasPermission("nonscene.reload")) subCommands.add("reload")
             LIBRARY_COMMANDS.filterTo(subCommands) { sender.hasPermission("nonscene.$it") }
             if (sender is Player) {
                 if (sender.hasPermission("nonscene.start")) subCommands.add("start")

@@ -17,7 +17,7 @@ commands:
   nonscene:
     description: Main command for cutscene management
     aliases: [ns]
-    usage: /nonscene <start|delete|all|play|showpath|stop|skip|pause|resume|rename|copy|export|import|event|edit|key|preview|save|discard> [args]
+    usage: /nonscene <start|delete|all|play|showpath|stop|skip|pause|resume|rename|copy|export|import|event|edit|key|preview|save|discard|reload> [args]
     permission: nonscene.use
 
 permissions:
@@ -75,6 +75,9 @@ permissions:
   nonscene.edit:
     description: Allows editing cutscene keyframes
     default: op
+  nonscene.reload:
+    description: Allows reloading config.yml, messages.yml and triggers
+    default: op
   nonscene.admin:
     description: Grants all nonscene permissions
     default: op
@@ -97,3 +100,4 @@ permissions:
       nonscene.import: true
       nonscene.event: true
       nonscene.edit: true
+      nonscene.reload: true

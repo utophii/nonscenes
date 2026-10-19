@@ -12,6 +12,9 @@ specify-cutscene-name: "${prefix}&#e74c3cPlease specify a cutscene name."
 invalid-cutscene-name: "${prefix}&#e74c3cCutscene names may only contain letters, digits, underscore and hyphen."
 player-not-online: "${prefix}&#e74c3cPlayer &#f39c12{player} &#e74c3cis not online."
 error-occurred: "${prefix}&#e74c3cSomething went wrong. Check the server log."
+config-reloaded: "${prefix}&#2ecc71Reloaded config.yml, messages.yml and triggers."
+reload-failed: "${prefix}&#e74c3cReload failed, a config file is not valid YAML. The current config is kept, check the server log."
+reload-storage-restart: "${prefix}&#f39c12Storage settings changed. Restart the server to use them."
 
 # Recording messages
 already-recording: "${prefix}&#e74c3cYou are already recording a cutscene."
@@ -131,4 +134,5 @@ help-messages:
   - "&#3498db/nonscene event add <name> <type> <seconds> <data> &7- Add a timeline event"
   - "&#3498db/nonscene showpath <name> &7- Visualize cutscene path"
   - "&#3498db/nonscene edit <name> &7- Edit keyframes (creates the cutscene if new)"
+  - "&#3498db/nonscene reload &7- Reload config, messages and triggers"
   - "&8&m------------------------------"

@@ -44,7 +44,7 @@
 - [x] Fade in/out and a proper camera lock (not only an armor stand)
 - [x] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
 - [x] Pause, skip, rename, copy, export/import a single cutscene file
-- [ ] `/nonscene reload`
+- [x] `/nonscene reload`
 - [ ] Confirm before delete
 - [ ] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only
 - [ ] FastStats
