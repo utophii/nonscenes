@@ -6,6 +6,9 @@ import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
 import org.bukkit.configuration.ConfigurationSection
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.event.HoverEvent
 import org.bukkit.entity.Player
 import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
@@ -18,6 +21,9 @@ import com.nonxedy.util.CutsceneNames
 class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompleter {
     private val configManager: ConfigManagerInterface by lazy { plugin.configManager }
     private val cutsceneManager: CutsceneManagerInterface by lazy { plugin.cutsceneManager }
+
+    // sender key -> lowercase cutscene name and when the confirmation runs out
+    private val pendingDeletes = mutableMapOf<String, Pair<String, Long>>()
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
         if (args.isEmpty()) {
@@ -43,7 +49,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 }
                 handleEditor(sender, args)
             }
-            "start", "delete", "all", "showpath", "stop" -> {
+            "start", "all", "showpath", "stop" -> {
                 if (sender !is Player) {
                     sender.sendMessage(configManager.getMessage("player-only-command"))
                     return true
@@ -193,6 +199,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         val newName = args.getOrNull(2)
 
         when (action) {
+            "delete" -> handleDelete(sender, name, newName.equals("confirm", ignoreCase = true))
             "rename" -> {
                 // looked up before the rename, the triggers still point at the old name
                 val references = plugin.triggerService?.references(name).orEmpty()
@@ -244,6 +251,41 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             }
         }
     }
+
+    private fun handleDelete(sender: CommandSender, name: String, confirm: Boolean) {
+        val cutscene = cutsceneManager.getCutscene(name)
+            ?: return sendFailure(sender, CutsceneOpResult.NOT_FOUND, name, null)
+        val key = deleteKey(sender)
+        val now = System.currentTimeMillis()
+        pendingDeletes.values.removeIf { it.second < now }
+
+        // confirm only counts after the warning
+        if (!confirm || pendingDeletes[key]?.first != cutscene.name.lowercase()) {
+            pendingDeletes[key] = cutscene.name.lowercase() to now + DELETE_CONFIRM_MS
+            sendDeleteConfirmation(sender, cutscene.name)
+            return
+        }
+        pendingDeletes.remove(key)
+        val result = cutsceneManager.deleteCutscene(cutscene.name)
+        if (result != CutsceneOpResult.OK) return sendFailure(sender, result, cutscene.name, null)
+        sender.sendMessage(configManager.getMessage("cutscene-deleted").replace("{name}", cutscene.name))
+    }
+
+    private fun sendDeleteConfirmation(sender: CommandSender, name: String) {
+        val seconds = (DELETE_CONFIRM_MS / 1000).toString()
+        sender.sendMessage(
+            configManager.getMessage("delete-confirm").replace("{name}", name).replace("{seconds}", seconds)
+        )
+        if (sender !is Player) return
+        val command = "/nonscene delete $name confirm"
+        val button = configManager.getMessageComponent("delete-confirm-button")
+            .clickEvent(ClickEvent.runCommand(command))
+            .hoverEvent(HoverEvent.showText(Component.text(command)))
+        sender.sendMessage(button)
+    }
+
+    private fun deleteKey(sender: CommandSender): String =
+        (sender as? Player)?.uniqueId?.toString() ?: sender.name
 
     private fun sendFailure(sender: CommandSender, result: CutsceneOpResult, name: String, newName: String?) {
         val message = when (result) {
@@ -441,20 +483,6 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 cutsceneManager.startRecording(player, name, seconds)
             }
 
-            "delete" -> {
-                if (!player.hasPermission("nonscene.delete")) {
-                    player.sendMessage(configManager.getMessage("no-permission"))
-                    return
-                }
-
-                if (args.size < 2) {
-                    player.sendMessage(configManager.getMessage("specify-cutscene-name"))
-                    return
-                }
-
-                cutsceneManager.deleteCutscene(player, args[1])
-            }
-
             "all" -> {
                 if (!player.hasPermission("nonscene.list")) {
                     player.sendMessage(configManager.getMessage("no-permission"))
@@ -509,7 +537,6 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             LIBRARY_COMMANDS.filterTo(subCommands) { sender.hasPermission("nonscene.$it") }
             if (sender is Player) {
                 if (sender.hasPermission("nonscene.start")) subCommands.add("start")
-                if (sender.hasPermission("nonscene.delete")) subCommands.add("delete")
                 if (sender.hasPermission("nonscene.list")) subCommands.add("all")
                 if (sender.hasPermission("nonscene.showpath")) subCommands.add("showpath")
                 if (sender.hasPermission("nonscene.stop")) subCommands.add("stop")
@@ -540,7 +567,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                 }
             }
             if (sender is Player &&
-                (subCommand == "delete" || subCommand == "showpath") &&
+                subCommand == "showpath" &&
                 sender.hasPermission("nonscene.$subCommand")
             ) {
                 return filterCompletions(cutsceneManager.getCutsceneNames(), args[1])
@@ -568,6 +595,12 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
             }
         }
 
+        if (args.size == 3 && args[0].equals("delete", ignoreCase = true) &&
+            pendingDeletes[deleteKey(sender)]?.first == args[1].lowercase()
+        ) {
+            return filterCompletions(listOf("confirm"), args[2])
+        }
+
         if (args.size == 3 && args[0].equals("play", ignoreCase = true) && sender.hasPermission("nonscene.play.others")) {
             return filterCompletions(Bukkit.getOnlinePlayers().map { it.name }, args[2])
         }
@@ -593,6 +626,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
         val EDITOR_COMMANDS = setOf("edit", "key", "save", "discard", "preview")
         val KEY_INDEX_ACTIONS = setOf("add", "remove", "move", "speed", "tp")
         val PLAYBACK_CONTROLS = setOf("skip", "pause", "resume")
-        val LIBRARY_COMMANDS = listOf("rename", "copy", "export", "import")
+        val LIBRARY_COMMANDS = listOf("delete", "rename", "copy", "export", "import")
+        const val DELETE_CONFIRM_MS = 30_000L
     }
 }

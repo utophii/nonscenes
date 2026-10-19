@@ -45,7 +45,7 @@
 - [x] Keyframe editor: add / remove / move points, per-segment speed (spline through keyframes, never linear)
 - [x] Pause, skip, rename, copy, export/import a single cutscene file
 - [x] `/nonscene reload`
-- [ ] Confirm before delete
+- [x] Confirm before delete
 - [ ] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only
 - [ ] FastStats
 

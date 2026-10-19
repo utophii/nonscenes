@@ -513,22 +513,18 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     }
 
     // Deletion / Listing
-    override fun deleteCutscene(player: Player, name: String) {
+    override fun deleteCutscene(name: String): CutsceneOpResult {
         val normalized = name.lowercase()
-        val cutscene = cutscenes[normalized]
-        if (cutscene == null) {
-            player.sendMessage(plugin.configManager.getMessage("cutscene-not-found")?.replace("{name}", name) ?: "§cNot found")
-            return
-        }
+        val cutscene = cutscenes[normalized] ?: return CutsceneOpResult.NOT_FOUND
+        if (isInUse(cutscene.name)) return CutsceneOpResult.IN_USE
         try {
             deleteStoredCutscene(cutscene.name)
         } catch (e: Exception) {
             plugin.logger.log(Level.SEVERE, "Failed to delete cutscene: ${cutscene.name}", e)
-            player.sendMessage(plugin.configManager.getMessage("error-occurred") ?: "§cFailed to delete.")
-            return
+            return CutsceneOpResult.FAILED
         }
         cutscenes.remove(normalized)
-        player.sendMessage(plugin.configManager.getMessage("cutscene-deleted")?.replace("{name}", name) ?: "§aDeleted.")
+        return CutsceneOpResult.OK
     }
 
     override fun listAllCutscenes(player: Player) {

@@ -11,7 +11,6 @@ interface CutsceneManagerInterface {
     fun startRecording(player: Player, name: String, seconds: Int)
     fun playCutscene(player: Player, name: String): Boolean
     fun previewCutscene(player: Player, cutscene: Cutscene): Boolean
-    fun deleteCutscene(player: Player, name: String)
     fun listAllCutscenes(player: Player)
     fun showCutscenePath(player: Player, name: String)
 
@@ -35,6 +34,7 @@ interface CutsceneManagerInterface {
     fun clearTimelineEvents(name: String): Boolean
     fun saveEditedCutscene(cutscene: Cutscene)
 
+    fun deleteCutscene(name: String): CutsceneOpResult
     fun renameCutscene(name: String, newName: String): CutsceneOpResult
     fun copyCutscene(name: String, newName: String): CutsceneOpResult
     fun exportCutscene(name: String): CutsceneOpResult
