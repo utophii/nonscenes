@@ -37,5 +37,10 @@ data class PlaybackSettings private constructor(
 
 enum class InterpolationType {
     CATMULL_ROM,
-    BEZIER
+    BEZIER;
+
+    companion object {
+        fun parse(value: String?): InterpolationType =
+            entries.firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) } ?: CATMULL_ROM
+    }
 }

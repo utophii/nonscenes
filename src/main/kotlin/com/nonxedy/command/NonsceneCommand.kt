@@ -14,6 +14,7 @@ import com.nonxedy.Nonscenes
 import com.nonxedy.core.ConfigManagerInterface
 import com.nonxedy.core.CutsceneManagerInterface
 import com.nonxedy.core.CutsceneOpResult
+import com.nonxedy.model.recording.RecordingSettings
 import com.nonxedy.model.timeline.TimelineEvent
 import com.nonxedy.model.timeline.TimelineEventType
 import com.nonxedy.util.CutsceneNames
@@ -475,7 +476,7 @@ class NonsceneCommand(private val plugin: Nonscenes) : CommandExecutor, TabCompl
                     return
                 }
                 val seconds = args[2].toIntOrNull()
-                if (seconds == null || seconds <= 0 || seconds > 300) {
+                if (seconds == null || !RecordingSettings.isValidDuration(seconds)) {
                     player.sendMessage(configManager.getMessage("invalid-duration"))
                     return
                 }

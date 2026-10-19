@@ -46,7 +46,7 @@
 - [x] Pause, skip, rename, copy, export/import a single cutscene file
 - [x] `/nonscene reload`
 - [x] Confirm before delete
-- [ ] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only
+- [x] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only
 - [ ] FastStats
 
 ### Later

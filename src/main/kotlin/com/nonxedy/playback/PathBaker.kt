@@ -11,7 +11,12 @@ object PathBaker {
 
     // samples the spline at evenly spaced times. The result is what the camera
     // shows at 0, interval, 2 * interval, ... up to the cutscene's total duration
-    fun bake(cutscene: Cutscene, settings: PlaybackSettings, interpolator: PathInterpolator): List<Location> {
+    fun bake(
+        cutscene: Cutscene,
+        settings: PlaybackSettings,
+        interpolator: PathInterpolator,
+        worlds: (String) -> World? = Bukkit::getWorld
+    ): List<Location> {
         if (cutscene.frames.isEmpty()) return emptyList()
         val totalDurationMs = cutscene.totalDurationMs
         if (totalDurationMs <= 0) return emptyList()
@@ -23,7 +28,7 @@ object PathBaker {
         val worlds = HashMap<String, World>()
         fun world(name: String): World {
             return worlds.getOrPut(name) {
-                Bukkit.getWorld(name) ?: throw IllegalStateException("World '$name' is not loaded")
+                worlds(name) ?: throw IllegalStateException("World '$name' is not loaded")
             }
         }
 

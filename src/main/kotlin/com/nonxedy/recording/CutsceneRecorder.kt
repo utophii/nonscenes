@@ -25,10 +25,7 @@ class CutsceneRecorder(
         frames.clear()
 
         val captureIntervalTicks = settings.captureIntervalTicks.coerceAtLeast(1)
-        val frameDurationMs = (1000.0 / (20.0 / captureIntervalTicks)).toLong().coerceAtLeast(1L)
-        val recordingDurationMs = durationSeconds * 1000L
-        val startedAtMs = System.currentTimeMillis()
-        var nextFrameAtMs = startedAtMs
+        val schedule = CaptureSchedule(captureIntervalTicks, durationSeconds, System.currentTimeMillis())
 
         if (settings.progressBarEnabled) {
             bossBar = RecordingBossBar(
@@ -47,17 +44,15 @@ class CutsceneRecorder(
                 }
 
                 val now = System.currentTimeMillis()
-                while (now >= nextFrameAtMs && nextFrameAtMs < startedAtMs + recordingDurationMs) {
-                    frames.add(CutsceneFrame(player.location.clone()))
-                    nextFrameAtMs += frameDurationMs
-                    bossBar?.onProgress((now - startedAtMs).toDouble() / recordingDurationMs.toDouble())
-                }
+                val due = schedule.framesDue(now)
+                repeat(due) { frames.add(CutsceneFrame(player.location.clone())) }
+                if (due > 0) bossBar?.onProgress(schedule.progress(now))
 
-                if (now >= startedAtMs + recordingDurationMs) {
+                if (schedule.isFinished(now)) {
                     bossBar?.onProgress(1.0)
                     cancel()
                     cleanup()
-                    val cutscene = Cutscene(name, frames.toList(), frameDurationMs)
+                    val cutscene = Cutscene(name, frames.toList(), schedule.frameDurationMs)
                     onComplete(cutscene)
                 }
             }

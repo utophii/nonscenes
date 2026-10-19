@@ -149,9 +149,7 @@ class ConfigManager(private val plugin: Nonscenes) : ConfigManagerInterface {
 
     override fun getPlaybackSettings(): PlaybackSettings {
         val cfg = config ?: return PlaybackSettings()
-        val interpolation = runCatching {
-            InterpolationType.valueOf(cfg.getString("cutscene.playback.interpolation", "CATMULL_ROM")!!.uppercase())
-        }.getOrDefault(InterpolationType.CATMULL_ROM)
+        val interpolation = InterpolationType.parse(cfg.getString("cutscene.playback.interpolation"))
 
         val legacyMode = cfg.getString("cutscene.playback.mode")
         if (legacyMode != null && !legacyMode.equals("ASYNC_PACKET", ignoreCase = true)) {

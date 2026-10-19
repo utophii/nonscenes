@@ -8,4 +8,10 @@ data class RecordingSettings(
     val barStyle: BarStyle = BarStyle.SOLID,
     val barColor: BarColor = BarColor.BLUE,
     val captureIntervalTicks: Int = 1
-)
+) {
+    companion object {
+        const val MAX_DURATION_SECONDS: Int = 300
+
+        fun isValidDuration(seconds: Int?): Boolean = seconds != null && seconds in 1..MAX_DURATION_SECONDS
+    }
+}
