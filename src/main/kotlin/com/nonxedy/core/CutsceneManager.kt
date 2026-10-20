@@ -613,6 +613,7 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
     override fun hasActiveSession(player: Player): Boolean = playerSessions.containsKey(player.uniqueId)
     override fun isWatchingCutscene(player: Player): Boolean = playerSessions[player.uniqueId] is PlayerSession.Playback
     override fun getCutsceneNames(): List<String> = cutscenes.keys.toList()
+    override fun getCutsceneCount(): Int = cutscenes.size
     override fun getCutscene(name: String): Cutscene? = cutscenes[name.lowercase()]
 
     // a name is taken by a stored cutscene, a recording that will be saved under

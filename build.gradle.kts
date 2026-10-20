@@ -20,6 +20,10 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.codemc.io/repository/maven-releases/")
+    maven {
+        name = "faststatsReleases"
+        url = uri("https://repo.faststats.dev/releases")
+    }
 }
 
 dependencies {
@@ -34,6 +38,9 @@ dependencies {
 
     // Kotlin runtime
     implementation(kotlin("stdlib"))
+
+    // FastStats metrics and error tracking
+    implementation("dev.faststats.metrics:bukkit:0.30.2")
 
     // SnakeYAML for config
     implementation("org.yaml:snakeyaml:2.6")

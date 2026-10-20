@@ -29,6 +29,7 @@ interface CutsceneManagerInterface {
     fun isWatchingCutscene(player: Player): Boolean
 
     fun getCutsceneNames(): List<String>
+    fun getCutsceneCount(): Int
     fun getCutscene(name: String): Cutscene?
     fun addTimelineEvent(name: String, event: TimelineEvent): Boolean
     fun clearTimelineEvents(name: String): Boolean

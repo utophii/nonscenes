@@ -47,7 +47,7 @@
 - [x] `/nonscene reload`
 - [x] Confirm before delete
 - [x] Tests for storage, name validation, recording duration, path baking, and non-linear interpolation only
-- [ ] FastStats
+- [x] FastStats
 
 ### Later
 

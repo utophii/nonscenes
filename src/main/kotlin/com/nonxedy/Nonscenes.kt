@@ -17,6 +17,10 @@ import com.nonxedy.listener.CommandBlockerListener
 import com.nonxedy.listener.PlaybackGuardListener
 import com.nonxedy.listener.PlaybackLookLock
 import com.nonxedy.listener.PlayerStateRestorer
+import dev.faststats.ErrorTracker
+import dev.faststats.bukkit.BukkitContext
+import dev.faststats.data.Metric
+import java.util.Locale
 import java.util.logging.Logger
 
 class Nonscenes : JavaPlugin() {
@@ -33,6 +37,22 @@ class Nonscenes : JavaPlugin() {
         private set
     var triggerService: TriggerService? = null
         private set
+
+    private val faststats = BukkitContext.Factory(this, "3e3764a18d41ccfd142e432c2c0e7d26")
+        .errorTrackerService(ErrorTracker.contextAware())
+        .metrics { factory ->
+            factory
+                .addMetric(Metric.number("worlds") { server.worlds.size })
+                .addMetric(Metric.number("plugins") { server.pluginManager.plugins.size })
+                .addMetric(Metric.number("players_online") { server.onlinePlayers.size })
+                .addMetric(Metric.number("cutscenes_count") { cutsceneManager.getCutsceneCount() })
+                .addMetric(Metric.string("storage_type") {
+                    configManager.config?.getString("storage.type")?.uppercase(Locale.ROOT) ?: "SQLITE"
+                })
+                .addMetric(Metric.string("fade_mode") { configManager.getPlaybackSettings().fade.mode.name })
+                .create()
+        }
+        .create()
 
     override fun onEnable() {
         try {
@@ -55,6 +75,7 @@ class Nonscenes : JavaPlugin() {
             server.servicesManager.register(NonscenesAPI::class.java, api, this, ServicePriority.Normal)
             triggerService = TriggerService(this).also { it.register() }
             keyframeEditor = KeyframeEditor(this).also { it.register() }
+            faststats.ready()
 
             logger.info("nonscenes enabled with cutscene functionality")
         } catch (e: Exception) {
@@ -93,6 +114,7 @@ class Nonscenes : JavaPlugin() {
     }
 
     override fun onDisable() {
+        faststats.shutdown()
         triggerService?.unregister()
         triggerService = null
         if (::keyframeEditor.isInitialized) {
@@ -108,6 +130,9 @@ class Nonscenes : JavaPlugin() {
     }
 
     companion object {
+        // TODO: replace with the nonscenes project token from faststats.dev
+        private const val FASTSTATS_TOKEN = "REPLACE_ME"
+
         @JvmStatic
         fun getAPI(): NonscenesAPI = getPlugin(Nonscenes::class.java).api
     }
