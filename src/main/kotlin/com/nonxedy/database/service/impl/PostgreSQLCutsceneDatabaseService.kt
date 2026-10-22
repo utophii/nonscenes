@@ -1,22 +1,26 @@
 package com.nonxedy.database.service.impl
 
-import java.util.Properties
+import com.nonxedy.database.service.PoolSettings
+import com.zaxxer.hikari.HikariConfig
 
 class PostgreSQLCutsceneDatabaseService(
     private val host: String,
     private val port: Int,
     private val database: String,
-    private val username: String,
-    private val password: String
-) : AbstractSQLCutsceneDatabaseService() {
+    private val schema: String,
+    username: String,
+    password: String,
+    pool: PoolSettings
+) : PooledSQLCutsceneDatabaseService(username, password, pool) {
+
+    override val driverClassName = "org.postgresql.Driver"
 
     override fun getJdbcUrl(): String {
         return "jdbc:postgresql://$host:$port/$database"
     }
 
-    override fun connectionProperties(): Properties = Properties().apply {
-        setProperty("user", username)
-        setProperty("password", password)
+    override fun configure(config: HikariConfig) {
+        config.schema = schema
     }
 
     override fun getCreateTablesSQL(): Array<String> = arrayOf(

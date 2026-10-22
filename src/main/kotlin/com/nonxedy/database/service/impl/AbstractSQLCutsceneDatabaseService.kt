@@ -25,9 +25,6 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
     // Get the SQL for creating tables
     protected abstract fun getCreateTablesSQL(): Array<String>
 
-    // Get a database connection, creating one if needed
-    protected fun requireConnection(): Connection = connection ?: throw RuntimeException("Database not initialized")
-
     protected open fun connectionProperties(): Properties? = null
 
     protected open fun openConnection(): Connection {
@@ -36,9 +33,24 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         else DriverManager.getConnection(getJdbcUrl(), props)
     }
 
+    // Open the underlying connection (or pool)
+    protected open fun connect() {
+        connection = openConnection()
+    }
+
+    // Close the underlying connection (or pool)
+    protected open fun disconnect() {
+        connection?.close()
+        connection = null
+    }
+
+    // Run a block with a database connection
+    protected open fun <T> withConnection(block: (Connection) -> T): T =
+        block(connection ?: throw RuntimeException("Database not initialized"))
+
     override fun initialize() {
         try {
-            connection = openConnection()
+            connect()
             createTables()
             logger.info("Database initialized successfully")
         } catch (e: Exception) {
@@ -49,17 +61,14 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
     override fun shutdown() {
         try {
-            connection?.close()
-            connection = null
+            disconnect()
             logger.info("Database connection closed")
         } catch (e: Exception) {
             logger.log(Level.WARNING, "Error closing database connection", e)
         }
     }
 
-    override fun saveCutscene(cutscene: Cutscene) {
-        val conn = connection ?: throw RuntimeException("Database not initialized")
-
+    override fun saveCutscene(cutscene: Cutscene) = withConnection { conn ->
         try {
             conn.autoCommit = false
 
@@ -116,8 +125,7 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         }
     }
 
-    override fun loadAllCutscenes(): List<Cutscene> {
-        val conn = connection ?: throw RuntimeException("Database not initialized")
+    override fun loadAllCutscenes(): List<Cutscene> = withConnection { conn ->
         val cutscenes = mutableListOf<Cutscene>()
 
         conn.prepareStatement("""
@@ -169,12 +177,10 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         }
 
         logger.fine("Loaded ${cutscenes.size} cutscenes from database")
-        return cutscenes
+        cutscenes
     }
 
-    override fun deleteCutscene(name: String) {
-        val conn = connection ?: throw RuntimeException("Database not initialized")
-
+    override fun deleteCutscene(name: String) = withConnection { conn ->
         try {
             // Delete frames first (foreign key constraint)
             conn.prepareStatement("DELETE FROM cutscene_frames WHERE cutscene_name = ?").use { stmt ->
@@ -196,22 +202,18 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
         }
     }
 
-    override fun cutsceneExists(name: String): Boolean {
-        val conn = connection ?: throw RuntimeException("Database not initialized")
-
+    override fun cutsceneExists(name: String): Boolean = withConnection { conn ->
         conn.prepareStatement("SELECT COUNT(*) FROM cutscenes WHERE name = ?").use { stmt ->
             stmt.setString(1, name)
             stmt.executeQuery().use { rs ->
                 val exists = rs.next() && rs.getInt(1) > 0
                 logger.fine("Cutscene '$name' exists: $exists")
-                return exists
+                exists
             }
         }
     }
 
-    private fun createTables() {
-        val conn = connection ?: throw RuntimeException("Database not initialized")
-
+    private fun createTables() = withConnection { conn ->
         try {
             getCreateTablesSQL().forEach { sql ->
                 conn.createStatement().use { stmt ->
@@ -229,45 +231,46 @@ abstract class AbstractSQLCutsceneDatabaseService : CutsceneDatabaseService {
 
     private fun ensureTimingColumn(conn: Connection) {
         val metadata = conn.metaData
-        if (!columnExists(metadata, "cutscenes", "ticks_per_frame")) {
+        val schema = conn.schema
+        if (!columnExists(metadata, schema, "cutscenes", "ticks_per_frame")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscenes ADD COLUMN ticks_per_frame INTEGER NOT NULL DEFAULT 1")
             }
         }
 
-        if (!columnExists(metadata, "cutscenes", "frame_duration_ms")) {
+        if (!columnExists(metadata, schema, "cutscenes", "frame_duration_ms")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscenes ADD COLUMN frame_duration_ms BIGINT NOT NULL DEFAULT 50")
             }
         }
 
-        if (!columnExists(metadata, "cutscenes", "events_text")) {
+        if (!columnExists(metadata, schema, "cutscenes", "events_text")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscenes ADD COLUMN events_text TEXT")
             }
         }
 
-        if (!columnExists(metadata, "cutscene_frames", "segment_ms")) {
+        if (!columnExists(metadata, schema, "cutscene_frames", "segment_ms")) {
             conn.createStatement().use { stmt ->
                 stmt.execute("ALTER TABLE cutscene_frames ADD COLUMN segment_ms BIGINT")
             }
         }
     }
 
-    private fun columnExists(metadata: DatabaseMetaData, tableName: String, columnName: String): Boolean {
-        metadata.getColumns(null, null, tableName, columnName).use { rs ->
+    private fun columnExists(metadata: DatabaseMetaData, schema: String?, tableName: String, columnName: String): Boolean {
+        metadata.getColumns(null, schema, tableName, columnName).use { rs ->
             if (rs.next()) {
                 return true
             }
         }
 
-        metadata.getColumns(null, null, tableName.uppercase(), columnName.uppercase()).use { rs ->
+        metadata.getColumns(null, schema, tableName.uppercase(), columnName.uppercase()).use { rs ->
             if (rs.next()) {
                 return true
             }
         }
 
-        metadata.getColumns(null, null, tableName.lowercase(), columnName.lowercase()).use { rs ->
+        metadata.getColumns(null, schema, tableName.lowercase(), columnName.lowercase()).use { rs ->
             return rs.next()
         }
     }

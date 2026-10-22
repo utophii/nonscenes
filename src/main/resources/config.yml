@@ -122,7 +122,6 @@ storage:
     database: minecraft
     username: root
     password: password
-    table-prefix: nonscenes_
     pool:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -151,11 +150,3 @@ storage:
     collection: cutscenes
     username: ""
     password: ""
-    options:
-      connect-timeout: 10000
-      server-selection-timeout: 30000
-
-  general:
-    auto-create-tables: true
-    max-retry-attempts: 3
-    retry-delay: 5

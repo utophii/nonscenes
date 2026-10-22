@@ -4,6 +4,7 @@ import com.nonxedy.Nonscenes
 import com.nonxedy.database.CutsceneYaml
 import com.nonxedy.database.service.CutsceneDatabaseService
 import com.nonxedy.database.service.DatabaseType
+import com.nonxedy.database.service.PoolSettings
 import com.nonxedy.database.service.impl.MongoDBCutsceneDatabaseService
 import com.nonxedy.database.service.impl.MySQLCutsceneDatabaseService
 import com.nonxedy.database.service.impl.PostgreSQLCutsceneDatabaseService
@@ -91,14 +92,17 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 port = config?.getInt("storage.mysql.port", 3306) ?: 3306,
                 database = config?.getString("storage.mysql.database") ?: "minecraft",
                 username = config?.getString("storage.mysql.username") ?: "root",
-                password = config?.getString("storage.mysql.password") ?: ""
+                password = config?.getString("storage.mysql.password") ?: "",
+                pool = PoolSettings.from(config?.getConfigurationSection("storage.mysql.pool"))
             )
             DatabaseType.POSTGRESQL -> PostgreSQLCutsceneDatabaseService(
                 host = config?.getString("storage.postgresql.host") ?: "localhost",
                 port = config?.getInt("storage.postgresql.port", 5432) ?: 5432,
                 database = config?.getString("storage.postgresql.database") ?: "minecraft",
+                schema = config?.getString("storage.postgresql.schema").orEmpty().ifBlank { "public" },
                 username = config?.getString("storage.postgresql.username") ?: "postgres",
-                password = config?.getString("storage.postgresql.password") ?: ""
+                password = config?.getString("storage.postgresql.password") ?: "",
+                pool = PoolSettings.from(config?.getConfigurationSection("storage.postgresql.pool"))
             )
             DatabaseType.MONGODB -> {
                 val host = config?.getString("storage.mongodb.host") ?: "localhost"
@@ -106,8 +110,9 @@ class CutsceneManager(private val plugin: Nonscenes) : CutsceneManagerInterface 
                 val database = config?.getString("storage.mongodb.database") ?: "minecraft"
                 val username = config?.getString("storage.mongodb.username").orEmpty()
                 val password = config?.getString("storage.mongodb.password").orEmpty()
+                val collection = config?.getString("storage.mongodb.collection").orEmpty().ifBlank { "cutscenes" }
                 val credentials = if (username.isNotBlank()) "$username:$password@" else ""
-                MongoDBCutsceneDatabaseService("mongodb://$credentials$host:$port", database)
+                MongoDBCutsceneDatabaseService("mongodb://$credentials$host:$port", database, collection)
             }
         }
     }

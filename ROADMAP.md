@@ -15,7 +15,7 @@
 ### Cleanup
 
 - [x] Stop dual-writing every cutscene to both the database and `cutscenes/*.yml`
-- [ ] Either wire HikariCP + pool / table-prefix / retry settings, or delete those unused config keys
+- [x] Either wire HikariCP + pool / table-prefix / retry settings, or delete those unused config keys
 - [ ] Relocate shaded libraries (SQLite, Hikari, JDBC drivers) or stop bundling unused DB drivers
 - [ ] Drop unused shaded deps already provided by Paper (SnakeYAML, Adventure, Commons Lang)
 - [ ] Return original cutscene names from `getCutsceneNames()` (not lowercase map keys)

@@ -120,13 +120,15 @@ Default is SQLite. For other databases, edit `config.yml`:
 
 ```yaml
 storage:
-  type: MYSQL  # or POSTGRESQL, MONGODB, REDIS
+  type: MYSQL  # or POSTGRESQL, MONGODB
   mysql:
     host: localhost
     port: 3306
     database: minecraft
     username: your_username
     password: your_password
+    pool:                      # HikariCP, MySQL/PostgreSQL only
+      maximum-pool-size: 10
 ```
 
 ## Support

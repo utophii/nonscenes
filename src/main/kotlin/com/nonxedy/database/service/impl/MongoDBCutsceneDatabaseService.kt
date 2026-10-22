@@ -13,7 +13,8 @@ import java.util.logging.Level
 // MongoDB implementation of CutsceneDatabaseService
 class MongoDBCutsceneDatabaseService(
     private val connectionString: String,
-    private val databaseName: String
+    private val databaseName: String,
+    private val collectionName: String
 ) : CutsceneDatabaseService {
 
     private var mongoClient: MongoClient? = null
@@ -49,7 +50,7 @@ class MongoDBCutsceneDatabaseService(
         val db = database ?: throw RuntimeException("Database not initialized")
 
         try {
-            val collection = db.getCollection("cutscenes")
+            val collection = db.getCollection(collectionName)
 
             // Delete existing cutscene
             collection.deleteOne(Document("name", cutscene.name))
@@ -92,7 +93,7 @@ class MongoDBCutsceneDatabaseService(
         val cutscenes = mutableListOf<Cutscene>()
 
         try {
-            val collection = db.getCollection("cutscenes")
+            val collection = db.getCollection(collectionName)
             val documents = collection.find()
 
             for (doc in documents) {
@@ -141,7 +142,7 @@ class MongoDBCutsceneDatabaseService(
         val db = database ?: throw RuntimeException("Database not initialized")
 
         try {
-            val collection = db.getCollection("cutscenes")
+            val collection = db.getCollection(collectionName)
             collection.deleteOne(Document("name", name))
 
         } catch (e: Exception) {
@@ -154,7 +155,7 @@ class MongoDBCutsceneDatabaseService(
         val db = database ?: throw RuntimeException("Database not initialized")
 
         try {
-            val collection = db.getCollection("cutscenes")
+            val collection = db.getCollection(collectionName)
             val count = collection.countDocuments(Document("name", name))
             return count > 0
 
@@ -169,7 +170,7 @@ class MongoDBCutsceneDatabaseService(
 
         try {
             // Create collections (MongoDB creates them automatically when first used)
-            val collection = db.getCollection("cutscenes")
+            val collection = db.getCollection(collectionName)
 
             // Create indexes
             collection.createIndex(Document("name", 1))
