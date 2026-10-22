@@ -16,6 +16,13 @@ kotlin {
     jvmToolchain(21)
 }
 
+// Resolved by the server from Maven Central, see plugin.yml `libraries`
+val runtimeLibraries = listOf(
+    "com.zaxxer:HikariCP:7.0.2",
+    "org.postgresql:postgresql:42.7.12",
+    "org.mongodb:mongodb-driver-sync:5.6.1"
+)
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -42,23 +49,14 @@ dependencies {
     // FastStats metrics and error tracking
     implementation("dev.faststats.metrics:bukkit:0.30.2")
 
-    // SnakeYAML for config
-    implementation("org.yaml:snakeyaml:2.6")
+    // SQLite and MySQL drivers are bundled with the server
+    compileOnly("org.xerial:sqlite-jdbc:3.49.1.0")
 
-    // Adventure text minimessage
-    implementation("net.kyori:adventure-text-minimessage:4.24.0")
-
-    // Apache Commons Lang
-    implementation("org.apache.commons:commons-lang3:3.20.0")
-
-    // Database dependencies
-    implementation("com.zaxxer:HikariCP:7.0.2")
-    implementation("com.mysql:mysql-connector-j:9.5.0")
-    implementation("org.postgresql:postgresql:42.7.12")
-    implementation("org.xerial:sqlite-jdbc:3.50.3.0")
-    implementation("org.mongodb:mongodb-driver-sync:5.6.1")
+    // Downloaded by the server at startup via plugin.yml `libraries`
+    runtimeLibraries.forEach { compileOnly(it) }
 
     // Test dependencies
+    testImplementation("org.xerial:sqlite-jdbc:3.49.1.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     testImplementation("org.mockito:mockito-core:5.12.0")
@@ -67,10 +65,13 @@ dependencies {
 
 tasks {
     processResources {
+        val libraries = runtimeLibraries.joinToString("\n") { "  - $it" }
+        inputs.property("libraries", libraries)
         filesMatching("plugin.yml") {
             expand(
                 "version" to project.version,
-                "name" to project.name
+                "name" to project.name,
+                "libraries" to libraries
             )
         }
     }
@@ -81,6 +82,7 @@ tasks {
 
     shadowJar {
         archiveClassifier.set("")
+        relocate("kotlin", "com.nonxedy.libs.kotlin")
     }
 
     build {

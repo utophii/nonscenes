@@ -16,8 +16,8 @@
 
 - [x] Stop dual-writing every cutscene to both the database and `cutscenes/*.yml`
 - [x] Either wire HikariCP + pool / table-prefix / retry settings, or delete those unused config keys
-- [ ] Relocate shaded libraries (SQLite, Hikari, JDBC drivers) or stop bundling unused DB drivers
-- [ ] Drop unused shaded deps already provided by Paper (SnakeYAML, Adventure, Commons Lang)
+- [x] Relocate shaded libraries (SQLite, Hikari, JDBC drivers) or stop bundling unused DB drivers
+- [x] Drop unused shaded deps already provided by Paper (SnakeYAML, Adventure, Commons Lang)
 - [ ] Return original cutscene names from `getCutsceneNames()` (not lowercase map keys)
 - [ ] Fix mixed-up cancel messages (`error-occurred` key added)
 - [ ] Use or remove `smooth-rotation` and other unused config options

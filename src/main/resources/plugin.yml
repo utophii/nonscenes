@@ -13,6 +13,9 @@ depend:
 softdepend:
   - LuckPerms
 
+libraries:
+${libraries}
+
 commands:
   nonscene:
     description: Main command for cutscene management
